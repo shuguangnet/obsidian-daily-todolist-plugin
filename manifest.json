@@ -1,0 +1,9 @@
+{
+  "id": "obsidian-daily-todolist",
+  "name": "Daily TodoList",
+  "version": "0.1.0",
+  "minAppVersion": "0.16.0",
+  "description": "Manage today's todo list inside your daily note.",
+  "author": "shuguang",
+  "isDesktopOnly": false
+}

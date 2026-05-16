@@ -1,0 +1,147 @@
+.daily-todolist-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.daily-todolist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.daily-todolist-title {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.daily-todolist-actions,
+.daily-todolist-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.daily-todolist-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.daily-todolist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.daily-todolist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.daily-todolist-item-text {
+  flex: 1;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.daily-todolist-item-completed .daily-todolist-item-text {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.daily-todolist-empty,
+.daily-todolist-stats {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.daily-todolist-delete {
+  color: var(--text-muted);
+}
+
+.daily-todolist-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 8px;
+}
+
+.daily-todolist-tab.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.daily-todolist-calendar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.daily-todolist-calendar-title {
+  font-weight: 600;
+}
+
+.daily-todolist-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.daily-todolist-calendar-weekday {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-align: center;
+}
+
+.daily-todolist-calendar-day {
+  min-height: 54px;
+  padding: 5px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  cursor: pointer;
+  background: var(--background-primary);
+}
+
+.daily-todolist-calendar-day:hover {
+  background: var(--background-modifier-hover);
+}
+
+.daily-todolist-calendar-day.is-selected {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+
+.daily-todolist-calendar-day.is-empty {
+  cursor: default;
+  background: transparent;
+  border-color: transparent;
+}
+
+.daily-todolist-calendar-date {
+  font-weight: 600;
+}
+
+.daily-todolist-calendar-count,
+.daily-todolist-calendar-scheduled,
+.daily-todolist-task-meta {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin-top: 2px;
+}
+
+.daily-todolist-gantt-preview {
+  overflow-x: auto;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+}
+
+.daily-todolist-gantt-item {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
