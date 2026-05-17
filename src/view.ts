@@ -11,11 +11,13 @@ import {
 import { buildCalendarGrid, getMonthSummaries } from './calendar';
 import { createMermaidGantt, enrichTask, readTasksForDateRange, scheduledTasks } from './schedule';
 import { addMemoToContent, deleteMemoFromContent, parseMemosFromContent, readMemosForDateRange } from './memos';
+import { readJournalForDate, readJournalsForDateRange, upsertJournalInContent } from './journal';
 import { formatTaskInput, validateTaskScheduleInput } from './task-format';
 import { EditTaskModal } from './edit-task-modal';
 import { getPriorityOption, renderPriorityBadge } from './ui';
 import type {
   CalendarDaySummary,
+  DailyJournal,
   DailyMemo,
   DailyTask,
   RankedStat,
@@ -25,7 +27,7 @@ import type {
 } from './types';
 
 export const DAILY_TODOLIST_VIEW_TYPE = 'daily-todolist-view';
-export type DailyTodoListTab = 'home' | 'today' | 'memo' | 'calendar' | 'gantt' | 'stats';
+export type DailyTodoListTab = 'home' | 'today' | 'journal' | 'memo' | 'calendar' | 'gantt' | 'stats';
 type GanttRangePreset = 'week' | 'month' | 'quarter' | null;
 
 function parseGanttMoment(value: string, endOfDay = false): moment.Moment {
@@ -42,6 +44,7 @@ export class DailyTodoListView extends ItemView {
   private dueDateEl: HTMLInputElement | null = null;
   private priorityEl: HTMLSelectElement | null = null;
   private memoInputEl: HTMLTextAreaElement | null = null;
+  private journalInputEl: HTMLTextAreaElement | null = null;
   private activeTab: DailyTodoListTab;
   private selectedDate = window.moment().format('YYYY-MM-DD');
   private currentMonth = window.moment().format('YYYY-MM');
@@ -102,6 +105,8 @@ export class DailyTodoListView extends ItemView {
       await this.renderGantt(root, refreshId);
     } else if (this.activeTab === 'memo') {
       await this.renderMemo(root, refreshId);
+    } else if (this.activeTab === 'journal') {
+      await this.renderJournal(root, refreshId);
     } else if (this.activeTab === 'stats') {
       await this.renderStats(root, refreshId);
     } else {
@@ -121,6 +126,7 @@ export class DailyTodoListView extends ItemView {
     const tabs = root.createDiv({ cls: 'daily-todolist-tabs daily-todolist-tabs-wide' });
     this.renderTabButton(tabs, 'home', '首页');
     this.renderTabButton(tabs, 'today', '今日');
+    this.renderTabButton(tabs, 'journal', '日记');
     this.renderTabButton(tabs, 'memo', '备忘录');
     this.renderTabButton(tabs, 'calendar', '日历');
     this.renderTabButton(tabs, 'gantt', '甘特图');
@@ -200,15 +206,19 @@ export class DailyTodoListView extends ItemView {
     root.empty();
     const today = window.moment().format('YYYY-MM-DD');
     const { start, end } = this.getMonthRange();
-    const [tasks, memos, analytics] = await Promise.all([
+    const [tasks, memos, journals, analytics] = await Promise.all([
       this.getRangeTasks(start, end),
       readMemosForDateRange(this.app, this.plugin.settings, start, end),
+      readJournalsForDateRange(this.app, this.plugin.settings, start, end),
       this.plugin.getVaultAnalytics(),
     ]);
     if (!this.canRender(refreshId)) return;
 
     const todayTasks = tasks.filter((task) => task.date === today);
     const todayMemos = memos.filter((memo) => memo.date === today);
+    const todayJournal = journals.find((journal) => journal.date === today);
+    const journalDays = journals.filter((journal) => journal.text.trim().length > 0).length;
+    const hasJournalToday = Boolean(todayJournal?.text.trim());
     const hero = root.createDiv({ cls: 'daily-todolist-home-hero daily-todolist-atlas-hero' });
     hero.createDiv({ cls: 'daily-todolist-gantt-kicker', text: 'Knowledge Atlas' });
     hero.createDiv({ cls: 'daily-todolist-gantt-hero-title', text: '你的知识库总控台' });
@@ -228,6 +238,7 @@ export class DailyTodoListView extends ItemView {
     this.renderOverviewCard(cards, '近 7 天更新', String(analytics.recentNotes), analytics.weeklyGrowth >= 0 ? `较上周 +${analytics.weeklyGrowth}` : `较上周 ${analytics.weeklyGrowth}`);
     this.renderOverviewCard(cards, '孤岛笔记', String(analytics.orphanNotes), `${analytics.totalInboundLinks} 条入链 / ${analytics.totalOutboundLinks} 条出链`);
     this.renderOverviewCard(cards, '今日捕捉', `${todayTasks.length} 待办`, `${todayMemos.length} 条备忘录`);
+    this.renderOverviewCard(cards, '日记记录', `${journalDays} 天`, hasJournalToday ? '今天已写日记' : '今天还没写日记');
 
     const quick = root.createDiv({ cls: 'daily-todolist-home-actions' });
     quick.createEl('button', { text: '刷新首页' }).addEventListener('click', async () => {
@@ -235,6 +246,7 @@ export class DailyTodoListView extends ItemView {
       await this.refresh();
     });
     this.renderQuickTabButton(quick, 'today', '记录待办');
+    this.renderQuickTabButton(quick, 'journal', hasJournalToday ? '继续写日记' : '写日记');
     this.renderQuickTabButton(quick, 'memo', '写备忘录');
     this.renderQuickTabButton(quick, 'stats', '查看统计');
     quick.createEl('button', { text: '打开今日笔记' }).addEventListener('click', () => {
@@ -290,12 +302,71 @@ export class DailyTodoListView extends ItemView {
     this.renderMemoList(root, memos, '今天还没有备忘录。', file);
   }
 
+  private async renderJournal(root: HTMLElement, refreshId: number): Promise<void> {
+    root.empty();
+    const compose = root.createDiv({ cls: 'daily-todolist-compose daily-todolist-memo-compose' });
+    compose.createDiv({ cls: 'daily-todolist-compose-title', text: '今日日记' });
+    this.journalInputEl = compose.createEl('textarea', {
+      cls: 'daily-todolist-input daily-todolist-memo-input',
+      attr: { placeholder: '记录今天的进展、复盘和想法...' },
+    });
+
+    const actions = compose.createDiv({ cls: 'daily-todolist-actions' });
+    actions.createEl('button', { cls: 'daily-todolist-add-button', text: '保存日记' })
+      .addEventListener('click', () => this.saveJournalFromInput());
+    actions.createEl('button', { text: '打开今日笔记' }).addEventListener('click', () => {
+      openTodayDailyNote(this.app, this.plugin.settings);
+    });
+
+    const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
+    if (!this.canRender(refreshId)) return;
+    if (!file) {
+      root.createDiv({ cls: 'daily-todolist-empty', text: '今日 Daily Note 不存在。' });
+      return;
+    }
+
+    const journal = await this.readJournal(file);
+    if (!this.canRender(refreshId)) return;
+    if (this.journalInputEl) this.journalInputEl.value = journal.text;
+    root.createDiv({
+      cls: 'daily-todolist-stats',
+      text: journal.text.trim().length > 0 ? '今日日记已存在内容' : '今日日记还是空白',
+    });
+  }
+
+  private async saveJournalFromInput(): Promise<void> {
+    const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
+    if (!file) return;
+
+    const content = await this.app.vault.read(file);
+    const nextContent = upsertJournalInContent(
+      content,
+      this.plugin.settings.journalHeading,
+      this.journalInputEl?.value ?? '',
+    );
+    await this.app.vault.modify(file, nextContent);
+    this.clearCaches();
+    new Notice('今日日记已保存');
+    await this.refresh();
+  }
+
+  private async readJournal(
+    file: TFile,
+    date = window.moment().format('YYYY-MM-DD'),
+    path = file.path,
+  ): Promise<DailyJournal> {
+    const journal = await readJournalForDate(this.app, this.plugin.settings, date);
+    if (journal) return journal;
+    return { text: '', date, filePath: path };
+  }
+
   private async renderStats(root: HTMLElement, refreshId: number): Promise<void> {
     root.empty();
     const { start, end } = this.getMonthRange();
-    const [tasks, memos, analytics] = await Promise.all([
+    const [tasks, memos, journals, analytics] = await Promise.all([
       this.getRangeTasks(start, end),
       readMemosForDateRange(this.app, this.plugin.settings, start, end),
+      readJournalsForDateRange(this.app, this.plugin.settings, start, end),
       this.plugin.getVaultAnalytics(),
     ]);
     if (!this.canRender(refreshId)) return;
@@ -303,6 +374,8 @@ export class DailyTodoListView extends ItemView {
     const completed = tasks.filter((task) => task.completed).length;
     const active = tasks.length - completed;
     const planned = scheduledTasks(tasks);
+    const journalDays = journals.filter((journal) => journal.text.trim().length > 0).length;
+    const hasJournalToday = journals.some((journal) => journal.date === window.moment().format('YYYY-MM-DD') && journal.text.trim().length > 0);
     const overdue = planned.filter((task) => {
       const endDate = task.endDate ?? task.dueDate ?? task.startDate;
       return !task.completed && endDate && parseGanttMoment(endDate, true).isBefore(window.moment());
@@ -316,6 +389,7 @@ export class DailyTodoListView extends ItemView {
     this.renderOverviewCard(cards, '排期任务', String(planned.length), overdue > 0 ? `${overdue} 个已逾期` : '无逾期');
     this.renderOverviewCard(cards, '未解析链接', String(analytics.unresolvedLinks), `${analytics.orphanNotes} 篇孤岛笔记`);
     this.renderOverviewCard(cards, '备忘录', String(memos.length), `${memoDays} 天有记录`);
+    this.renderOverviewCard(cards, '日记记录', `${journalDays} 天`, hasJournalToday ? '今天已写日记' : '今天还没写日记');
     this.renderOverviewCard(cards, '平均篇幅', `${analytics.averageWordsPerNote}`, '每篇笔记平均字数');
 
     const bars = root.createDiv({ cls: 'daily-todolist-stats-bars' });

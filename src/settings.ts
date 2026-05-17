@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS: DailyTodoListSettings = {
   dailyNoteFormat: 'YYYY-MM-DD',
   todoHeading: 'TodoList',
   memoHeading: 'Memo',
+  journalHeading: 'Journal',
   insertPosition: 'bottom',
   showCompleted: true,
   openViewOnStartup: false,
@@ -93,6 +94,18 @@ export class DailyTodoListSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
+      .setName('日记标题')
+      .setDesc('每日笔记中用于保存日记正文的标题名称。')
+      .addText((text) => text
+        .setPlaceholder('Journal')
+        .setValue(this.plugin.settings.journalHeading)
+        .onChange(async (value) => {
+          this.plugin.settings.journalHeading = value.trim() || DEFAULT_SETTINGS.journalHeading;
+          await this.plugin.saveSettings();
+          this.plugin.refreshViews();
+        }));
+
+    new Setting(containerEl)
       .setName('新任务插入位置')
       .setDesc('选择新任务插入 TodoList 区块顶部或底部。')
       .addDropdown((dropdown) => dropdown
@@ -138,6 +151,7 @@ export class DailyTodoListSettingTab extends PluginSettingTab {
       .addDropdown((dropdown) => dropdown
         .addOption('home', '首页')
         .addOption('today', '今日')
+        .addOption('journal', '日记')
         .addOption('memo', '备忘录')
         .addOption('calendar', '日历')
         .addOption('gantt', '甘特图')

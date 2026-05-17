@@ -160,6 +160,14 @@ export function registerDailyTodoListCommands(plugin: DailyTodoListPlugin): void
   });
 
   plugin.addCommand({
+    id: 'open-journal-view',
+    name: 'Open Vault Atlas journal',
+    callback: async () => {
+      await plugin.activateView('journal');
+    },
+  });
+
+  plugin.addCommand({
     id: 'open-gantt-view',
     name: 'Open Vault Atlas gantt',
     callback: async () => {
