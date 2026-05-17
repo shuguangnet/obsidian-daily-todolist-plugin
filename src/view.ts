@@ -17,6 +17,7 @@ import type { CalendarDaySummary, DailyTask, TodoTask } from './types';
 
 export const DAILY_TODOLIST_VIEW_TYPE = 'daily-todolist-view';
 export type DailyTodoListTab = 'today' | 'calendar' | 'gantt';
+type GanttRangePreset = 'week' | 'month' | 'quarter' | null;
 
 function parseGanttMoment(value: string, endOfDay = false): moment.Moment {
   const format = value.includes(':') ? 'YYYY-MM-DD HH:mm' : 'YYYY-MM-DD';
@@ -34,6 +35,7 @@ export class DailyTodoListView extends ItemView {
   private activeTab: DailyTodoListTab;
   private selectedDate = window.moment().format('YYYY-MM-DD');
   private currentMonth = window.moment().format('YYYY-MM');
+  private ganttRangePreset: GanttRangePreset = null;
   private refreshId = 0;
   private monthCache = new Map<string, CalendarDaySummary[]>();
   private rangeCache = new Map<string, DailyTask[]>();
@@ -251,8 +253,8 @@ export class DailyTodoListView extends ItemView {
 
   private async renderGantt(root: HTMLElement, refreshId: number): Promise<void> {
     root.empty();
-    const start = window.moment().subtract(this.plugin.settings.ganttLookbackDays, 'day').format('YYYY-MM-DD');
-    const end = window.moment().add(this.plugin.settings.ganttLookaheadDays, 'day').format('YYYY-MM-DD');
+    const { start, end } = this.getGanttRange();
+    this.renderGanttRangeShortcuts(root);
     const tasks = await this.getRangeTasks(start, end);
     if (!this.canRender(refreshId)) return;
 
@@ -266,6 +268,53 @@ export class DailyTodoListView extends ItemView {
 
     this.renderGanttSummary(root, planned);
     this.renderGanttTimeline(root, planned, start, end);
+  }
+
+  private getGanttRange(): { start: string; end: string } {
+    const today = window.moment();
+    if (this.ganttRangePreset === 'week') {
+      return {
+        start: today.clone().startOf('week').format('YYYY-MM-DD'),
+        end: today.clone().endOf('week').format('YYYY-MM-DD'),
+      };
+    }
+    if (this.ganttRangePreset === 'month') {
+      return {
+        start: today.clone().startOf('month').format('YYYY-MM-DD'),
+        end: today.clone().endOf('month').format('YYYY-MM-DD'),
+      };
+    }
+    if (this.ganttRangePreset === 'quarter') {
+      return {
+        start: today.clone().startOf('quarter').format('YYYY-MM-DD'),
+        end: today.clone().endOf('quarter').format('YYYY-MM-DD'),
+      };
+    }
+
+    return {
+      start: today.clone().subtract(this.plugin.settings.ganttLookbackDays, 'day').format('YYYY-MM-DD'),
+      end: today.clone().add(this.plugin.settings.ganttLookaheadDays, 'day').format('YYYY-MM-DD'),
+    };
+  }
+
+  private renderGanttRangeShortcuts(root: HTMLElement): void {
+    const toolbar = root.createDiv({ cls: 'daily-todolist-gantt-range' });
+    this.renderGanttRangeButton(toolbar, null, '设置范围');
+    this.renderGanttRangeButton(toolbar, 'week', '本周');
+    this.renderGanttRangeButton(toolbar, 'month', '本月');
+    this.renderGanttRangeButton(toolbar, 'quarter', '本季度');
+  }
+
+  private renderGanttRangeButton(parent: HTMLElement, preset: GanttRangePreset, text: string): void {
+    const button = parent.createEl('button', {
+      cls: this.ganttRangePreset === preset ? 'daily-todolist-tab is-active' : 'daily-todolist-tab',
+      text,
+    });
+    button.addEventListener('click', async () => {
+      if (this.ganttRangePreset === preset) return;
+      this.ganttRangePreset = preset;
+      await this.refresh();
+    });
   }
 
   private async getRangeTasks(start: string, end: string): Promise<DailyTask[]> {
