@@ -41,7 +41,7 @@ DailyTodoListPlugin
 - **AddTodoModal**：命令面板添加今日待办的输入弹窗。
 - **DailyTodoListSettingTab**：插件设置页。
 - **markdown-tasks.ts**：只在指定标题区块内解析和修改 checkbox 行。
-- **schedule.ts**：解析 `[start::]`、`[end::]`、`[due::]` 和 `📅` 日期，并生成 Mermaid 甘特图。
+- **schedule.ts**：解析 `[start::]`、`[end::]`、`[due::]`、`[priority::]` 和 `📅` 元数据，并生成 Mermaid 甘特图。
 - **calendar.ts**：按月份读取 Daily Note 汇总每日任务数量。
 
 ## 数据模型
@@ -51,14 +51,15 @@ DailyTodoListPlugin
 ```markdown
 ## TodoList
 
-- [ ] 开发日历视图 [start:: 2026-05-17] [end:: 2026-05-20]
-- [ ] 发布插件 [due:: 2026-05-21]
+- [ ] 开发日历视图 [start:: 2026-05-17 09:30] [end:: 2026-05-20 18:00] [priority:: high]
+- [ ] 发布插件 [due:: 2026-05-21 10:00] [priority:: medium]
 ```
 
 运行时派生字段：
 
-- `displayText`：移除排期元数据后的展示文本。
-- `startDate` / `endDate` / `dueDate`：排期信息。
+- `displayText`：移除排期和优先级元数据后的展示文本。
+- `startDate` / `endDate` / `dueDate`：排期信息，支持 `YYYY-MM-DD` 和 `YYYY-MM-DD HH:mm`。
+- `priority`：任务优先级，匹配设置中的 `priorityOptions.id` 或旧任务中的标签文本。
 - `date` / `filePath`：任务来源 Daily Note。
 
 ## 设计决策
@@ -69,6 +70,7 @@ DailyTodoListPlugin
 | 2026-05-17 | 使用 Obsidian DOM helper 构建 UI | 保持插件简单、无前端框架依赖 | UI 复杂度受限 |
 | 2026-05-17 | 使用内联字段保存排期 | 与 Obsidian / Dataview 风格兼容 | 需要用户按约定书写日期 |
 | 2026-05-17 | 甘特图使用 Mermaid 渲染 | Obsidian 原生支持 Markdown 代码块渲染 | 不实现自定义拖拽甘特编辑 |
+| 2026-05-17 | 使用内联字段保存优先级 | 继续保持 Markdown 可读和可迁移 | 优先级颜色由插件设置负责展示 |
 
 ## 安全考量
 
@@ -85,6 +87,12 @@ DailyTodoListPlugin
 - 仅解析简单 checkbox：`- [ ]`、`- [x]`、`* [ ]`、`* [x]`。
 
 ## 变更历史
+
+### 2026-05-17 - 优先级
+
+- 新增任务优先级元数据解析和写入。
+- 设置页支持调整默认优先级名称和颜色。
+- 添加任务弹窗和侧边栏快速捕捉支持选择优先级。
 
 ### 2026-05-17 - 日历与甘特图
 

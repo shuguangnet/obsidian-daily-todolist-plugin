@@ -1,4 +1,4 @@
-import { ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf } from 'obsidian';
+import { App, ItemView, MarkdownRenderer, Modal, Notice, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 import type DailyTodoListPlugin from './main';
 import { getDailyNotePathForDate, getOrCreateTodayDailyNote, openTodayDailyNote } from './daily-note';
 import {
@@ -6,20 +6,134 @@ import {
   deleteTaskFromContent,
   parseTasksFromContent,
   toggleTaskInContent,
+  updateTaskInContent,
 } from './markdown-tasks';
 import { buildCalendarGrid, getMonthSummaries } from './calendar';
 import { createMermaidGantt, enrichTask, readTasksForDateRange, scheduledTasks } from './schedule';
-import type { CalendarDaySummary, DailyTask, TodoTask } from './types';
+import { formatTaskInput } from './task-format';
+import type { CalendarDaySummary, DailyTask, PriorityOption, TodoTask } from './types';
 
 export const DAILY_TODOLIST_VIEW_TYPE = 'daily-todolist-view';
 export type DailyTodoListTab = 'today' | 'calendar' | 'gantt';
 
+interface TaskEditValue {
+  text: string;
+  startDate?: string;
+  endDate?: string;
+  dueDate?: string;
+  priority?: string;
+}
+
+class EditTaskModal extends Modal {
+  private value: TaskEditValue;
+  private onSubmit: (value: TaskEditValue) => void;
+  private priorityOptions: PriorityOption[];
+
+  constructor(
+    app: App,
+    task: TodoTask,
+    priorityOptions: PriorityOption[],
+    onSubmit: (value: TaskEditValue) => void,
+  ) {
+    super(app);
+    this.priorityOptions = priorityOptions;
+    this.onSubmit = onSubmit;
+    this.value = {
+      text: task.displayText || task.text,
+      startDate: toDateTimeInputValue(task.startDate),
+      endDate: toDateTimeInputValue(task.endDate),
+      dueDate: toDateTimeInputValue(task.dueDate),
+      priority: task.priority ?? '',
+    };
+  }
+
+  onOpen(): void {
+    this.setTitle('编辑待办');
+    this.contentEl.addClass('daily-todolist-modal');
+
+    new Setting(this.contentEl)
+      .setName('任务内容')
+      .addText((text) => {
+        text.setValue(this.value.text)
+          .onChange((value) => {
+            this.value.text = value;
+          });
+        text.inputEl.focus();
+      });
+
+    this.createDateTimePicker('开始时间', this.value.startDate, (value) => {
+      this.value.startDate = value;
+    });
+    this.createDateTimePicker('结束时间', this.value.endDate, (value) => {
+      this.value.endDate = value;
+    });
+    this.createDateTimePicker('到期时间', this.value.dueDate, (value) => {
+      this.value.dueDate = value;
+    });
+    this.createPriorityPicker();
+
+    new Setting(this.contentEl)
+      .addButton((button) => button
+        .setButtonText('保存修改')
+        .setCta()
+        .onClick(() => this.submit()));
+  }
+
+  private createDateTimePicker(name: string, value: string | undefined, onChange: (value: string) => void): void {
+    const setting = new Setting(this.contentEl).setName(name);
+    const input = setting.controlEl.createEl('input', {
+      type: 'datetime-local',
+      cls: 'daily-todolist-date-input',
+    });
+    input.value = value ?? '';
+    input.addEventListener('change', () => onChange(input.value.trim()));
+  }
+
+  private createPriorityPicker(): void {
+    new Setting(this.contentEl)
+      .setName('优先级')
+      .addDropdown((dropdown) => {
+        dropdown.addOption('', '无优先级');
+        for (const option of this.priorityOptions) {
+          dropdown.addOption(option.id, option.label);
+        }
+        dropdown.setValue(this.value.priority ?? '');
+        dropdown.onChange((value) => {
+          this.value.priority = value;
+        });
+      });
+  }
+
+  private submit(): void {
+    if (!this.value.text.trim()) return;
+    this.close();
+    this.onSubmit(this.value);
+  }
+}
+
+function toDateTimeInputValue(value?: string): string | undefined {
+  return value?.replace(' ', 'T');
+}
+
+function parseGanttMoment(value: string, endOfDay = false): moment.Moment {
+  const format = value.includes(':') ? 'YYYY-MM-DD HH:mm' : 'YYYY-MM-DD';
+  const parsed = window.moment(value.replace('T', ' '), format);
+  return endOfDay && !value.includes(':') ? parsed.endOf('day') : parsed;
+}
+
 export class DailyTodoListView extends ItemView {
   private plugin: DailyTodoListPlugin;
   private inputEl: HTMLInputElement | null = null;
+  private startDateEl: HTMLInputElement | null = null;
+  private endDateEl: HTMLInputElement | null = null;
+  private dueDateEl: HTMLInputElement | null = null;
+  private priorityEl: HTMLSelectElement | null = null;
   private activeTab: DailyTodoListTab;
   private selectedDate = window.moment().format('YYYY-MM-DD');
   private currentMonth = window.moment().format('YYYY-MM');
+  private refreshId = 0;
+  private monthCache = new Map<string, CalendarDaySummary[]>();
+  private rangeCache = new Map<string, DailyTask[]>();
 
   constructor(leaf: WorkspaceLeaf, plugin: DailyTodoListPlugin) {
     super(leaf);
@@ -44,23 +158,38 @@ export class DailyTodoListView extends ItemView {
   }
 
   async setTab(tab: DailyTodoListTab): Promise<void> {
+    if (this.activeTab === tab) return;
     this.activeTab = tab;
     await this.refresh();
   }
 
   async refresh(): Promise<void> {
+    const refreshId = ++this.refreshId;
     const container = this.containerEl.children[1];
     container.empty();
     const root = container.createDiv({ cls: 'daily-todolist-view' });
     this.renderHeader(root);
+    const body = root.createDiv({ cls: 'daily-todolist-body' });
+
+    requestAnimationFrame(() => {
+      void this.renderActiveTab(body, refreshId);
+    });
+  }
+
+  private async renderActiveTab(root: HTMLElement, refreshId: number): Promise<void> {
+    root.createDiv({ cls: 'daily-todolist-loading', text: '正在整理你的待办...' });
 
     if (this.activeTab === 'calendar') {
-      await this.renderCalendar(root);
+      await this.renderCalendar(root, refreshId);
     } else if (this.activeTab === 'gantt') {
-      await this.renderGantt(root);
+      await this.renderGantt(root, refreshId);
     } else {
-      await this.renderToday(root);
+      await this.renderToday(root, refreshId);
     }
+  }
+
+  private canRender(refreshId: number): boolean {
+    return refreshId === this.refreshId;
   }
 
   private renderHeader(root: HTMLElement): void {
@@ -82,17 +211,27 @@ export class DailyTodoListView extends ItemView {
     button.addEventListener('click', () => this.setTab(tab));
   }
 
-  private async renderToday(root: HTMLElement): Promise<void> {
-    const inputRow = root.createDiv({ cls: 'daily-todolist-input-row' });
-    this.inputEl = inputRow.createEl('input', {
+  private async renderToday(root: HTMLElement, refreshId: number): Promise<void> {
+    root.empty();
+    const compose = root.createDiv({ cls: 'daily-todolist-compose' });
+    compose.createDiv({ cls: 'daily-todolist-compose-title', text: '快速捕捉' });
+    this.inputEl = compose.createEl('input', {
       type: 'text',
       cls: 'daily-todolist-input',
-      attr: { placeholder: '添加今日待办，可加 [start:: 2026-05-17] [end:: 2026-05-20]' },
+      attr: { placeholder: '写下今天最重要的一件事...' },
     });
     this.inputEl.addEventListener('keydown', async (event) => {
       if (event.key === 'Enter') await this.addTodoFromInput();
     });
-    inputRow.createEl('button', { text: '添加' }).addEventListener('click', () => this.addTodoFromInput());
+
+    const dateGrid = compose.createDiv({ cls: 'daily-todolist-date-grid' });
+    this.startDateEl = this.createDateInput(dateGrid, '开始', 'start');
+    this.endDateEl = this.createDateInput(dateGrid, '结束', 'end');
+    this.dueDateEl = this.createDateInput(dateGrid, '到期', 'due');
+    this.priorityEl = this.createPrioritySelect(compose);
+
+    compose.createEl('button', { cls: 'daily-todolist-add-button', text: '添加到今日' })
+      .addEventListener('click', () => this.addTodoFromInput());
 
     const actions = root.createDiv({ cls: 'daily-todolist-actions' });
     actions.createEl('button', { text: '打开今日笔记' }).addEventListener('click', () => {
@@ -101,16 +240,40 @@ export class DailyTodoListView extends ItemView {
     actions.createEl('button', { text: '刷新' }).addEventListener('click', () => this.refresh());
 
     const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
+    if (!this.canRender(refreshId)) return;
     if (!file) {
       root.createDiv({ cls: 'daily-todolist-empty', text: '今日 Daily Note 不存在。' });
       return;
     }
 
     const tasks = await this.readTasks(file);
+    if (!this.canRender(refreshId)) return;
     this.renderTaskList(root, file, tasks, '今天还没有待办。');
   }
 
-  private async renderCalendar(root: HTMLElement): Promise<void> {
+  private createDateInput(parent: HTMLElement, label: string, type: string): HTMLInputElement {
+    const field = parent.createDiv({ cls: 'daily-todolist-field' });
+    field.createDiv({ cls: 'daily-todolist-field-label', text: label });
+    return field.createEl('input', {
+      type: 'datetime-local',
+      cls: 'daily-todolist-date-input',
+      attr: { 'aria-label': `${label}日期时间`, 'data-date-type': type },
+    });
+  }
+
+  private createPrioritySelect(parent: HTMLElement): HTMLSelectElement {
+    const field = parent.createDiv({ cls: 'daily-todolist-field' });
+    field.createDiv({ cls: 'daily-todolist-field-label', text: '优先级' });
+    const select = field.createEl('select', { cls: 'daily-todolist-priority-select' });
+    select.createEl('option', { text: '无优先级', value: '' });
+    for (const option of this.plugin.settings.priorityOptions) {
+      select.createEl('option', { text: option.label, value: option.id });
+    }
+    return select;
+  }
+
+  private async renderCalendar(root: HTMLElement, refreshId: number): Promise<void> {
+    root.empty();
     const toolbar = root.createDiv({ cls: 'daily-todolist-calendar-toolbar' });
     toolbar.createEl('button', { text: '上月' }).addEventListener('click', async () => {
       this.currentMonth = window.moment(this.currentMonth, 'YYYY-MM').subtract(1, 'month').format('YYYY-MM');
@@ -122,7 +285,8 @@ export class DailyTodoListView extends ItemView {
       await this.refresh();
     });
 
-    const summaries = await getMonthSummaries(this.app, this.plugin.settings, this.currentMonth);
+    const summaries = await this.getMonthSummaries(this.currentMonth);
+    if (!this.canRender(refreshId)) return;
     const summaryMap = new Map(summaries.map((summary) => [summary.date, summary]));
     const grid = root.createDiv({ cls: 'daily-todolist-calendar-grid' });
     for (const weekday of ['日', '一', '二', '三', '四', '五', '六']) {
@@ -137,7 +301,16 @@ export class DailyTodoListView extends ItemView {
       this.renderCalendarDay(grid, date, summaryMap.get(date));
     }
 
-    await this.renderSelectedDate(root);
+    await this.renderSelectedDate(root, refreshId);
+  }
+
+  private async getMonthSummaries(month: string): Promise<CalendarDaySummary[]> {
+    const cached = this.monthCache.get(month);
+    if (cached) return cached;
+
+    const summaries = await getMonthSummaries(this.app, this.plugin.settings, month);
+    this.monthCache.set(month, summaries);
+    return summaries;
   }
 
   private renderCalendarDay(parent: HTMLElement, date: string, summary?: CalendarDaySummary): void {
@@ -159,7 +332,7 @@ export class DailyTodoListView extends ItemView {
     });
   }
 
-  private async renderSelectedDate(root: HTMLElement): Promise<void> {
+  private async renderSelectedDate(root: HTMLElement, refreshId: number): Promise<void> {
     root.createEl('h3', { text: `${this.selectedDate} 待办` });
     const path = getDailyNotePathForDate(this.app, this.plugin.settings, this.selectedDate);
     const file = this.app.vault.getAbstractFileByPath(path);
@@ -169,35 +342,139 @@ export class DailyTodoListView extends ItemView {
     }
 
     const tasks = await this.readTasks(file, this.selectedDate, path);
+    if (!this.canRender(refreshId)) return;
     this.renderTaskList(root, file, tasks, '该日期没有待办。');
   }
 
-  private async renderGantt(root: HTMLElement): Promise<void> {
+  private async renderGantt(root: HTMLElement, refreshId: number): Promise<void> {
+    root.empty();
     const start = window.moment().subtract(this.plugin.settings.ganttLookbackDays, 'day').format('YYYY-MM-DD');
     const end = window.moment().add(this.plugin.settings.ganttLookaheadDays, 'day').format('YYYY-MM-DD');
-    const tasks = await readTasksForDateRange(this.app, this.plugin.settings, start, end);
-    const planned = scheduledTasks(tasks);
+    const tasks = await this.getRangeTasks(start, end);
+    if (!this.canRender(refreshId)) return;
 
-    const tip = root.createDiv({ cls: 'daily-todolist-empty' });
-    tip.setText('排期语法：在任务后添加 [start:: YYYY-MM-DD] [end:: YYYY-MM-DD]，或 [due:: YYYY-MM-DD] / 📅 YYYY-MM-DD。');
+    const planned = scheduledTasks(tasks);
+    this.renderGanttHero(root, planned, start, end);
 
     if (planned.length === 0) {
       root.createDiv({ cls: 'daily-todolist-empty', text: '当前范围内没有带排期的任务。' });
       return;
     }
 
-    const markdown = createMermaidGantt(planned);
-    const preview = root.createDiv({ cls: 'daily-todolist-gantt-preview' });
-    await MarkdownRenderer.render(this.app, markdown, preview, '', this);
+    this.renderGanttSummary(root, planned);
+    this.renderGanttTimeline(root, planned, start, end);
+  }
 
-    const details = root.createDiv({ cls: 'daily-todolist-list' });
-    for (const task of planned) {
-      const item = details.createDiv({ cls: 'daily-todolist-gantt-item' });
-      item.createDiv({ cls: 'daily-todolist-item-text', text: task.displayText || task.text });
-      const start = task.startDate ?? task.dueDate ?? task.date;
-      const end = task.endDate ?? task.dueDate ?? task.startDate ?? task.date;
-      item.createDiv({ cls: 'daily-todolist-stats', text: `${start} → ${end}` });
+  private async getRangeTasks(start: string, end: string): Promise<DailyTask[]> {
+    const cacheKey = `${start}:${end}`;
+    const cached = this.rangeCache.get(cacheKey);
+    if (cached) return cached;
+
+    const tasks = await readTasksForDateRange(this.app, this.plugin.settings, start, end);
+    this.rangeCache.set(cacheKey, tasks);
+    return tasks;
+  }
+
+  private renderGanttHero(root: HTMLElement, tasks: DailyTask[], start: string, end: string): void {
+    const hero = root.createDiv({ cls: 'daily-todolist-gantt-hero' });
+    const copy = hero.createDiv({ cls: 'daily-todolist-gantt-hero-copy' });
+    copy.createDiv({ cls: 'daily-todolist-gantt-kicker', text: 'Timeline Board' });
+    copy.createDiv({ cls: 'daily-todolist-gantt-hero-title', text: '排期总览' });
+    copy.createDiv({
+      cls: 'daily-todolist-gantt-hero-subtitle',
+      text: `${window.moment(start).format('MM月DD日')} - ${window.moment(end).format('MM月DD日')} · ${tasks.length} 个排期任务`,
+    });
+
+    const metrics = hero.createDiv({ cls: 'daily-todolist-gantt-metrics' });
+    this.renderGanttMetric(metrics, '总任务', String(tasks.length));
+    this.renderGanttMetric(metrics, '已完成', String(tasks.filter((task) => task.completed).length));
+    this.renderGanttMetric(metrics, '进行中', String(tasks.filter((task) => !task.completed).length));
+  }
+
+  private renderGanttMetric(parent: HTMLElement, label: string, value: string): void {
+    const metric = parent.createDiv({ cls: 'daily-todolist-gantt-metric' });
+    metric.createDiv({ cls: 'daily-todolist-gantt-metric-value', text: value });
+    metric.createDiv({ cls: 'daily-todolist-gantt-metric-label', text: label });
+  }
+
+  private renderGanttSummary(root: HTMLElement, tasks: DailyTask[]): void {
+    const preview = root.createDiv({ cls: 'daily-todolist-gantt-preview' });
+    preview.createDiv({ cls: 'daily-todolist-gantt-preview-title', text: `${tasks.length} 个排期任务` });
+    const renderButton = preview.createEl('button', {
+      cls: 'daily-todolist-add-button',
+      text: '渲染 Mermaid 甘特图',
+    });
+    renderButton.addEventListener('click', async () => {
+      renderButton.detach();
+      await MarkdownRenderer.render(this.app, createMermaidGantt(tasks), preview, '', this);
+    });
+  }
+
+  private renderGanttTimeline(root: HTMLElement, tasks: DailyTask[], rangeStart: string, rangeEnd: string): void {
+    const start = window.moment(rangeStart, 'YYYY-MM-DD').startOf('day');
+    const end = window.moment(rangeEnd, 'YYYY-MM-DD').endOf('day');
+    const totalMinutes = Math.max(1, end.diff(start, 'minutes'));
+    const timeline = root.createDiv({ cls: 'daily-todolist-gantt-timeline' });
+
+    this.renderGanttScale(timeline, start, end);
+    this.renderTodayMarker(timeline, start, totalMinutes);
+    for (const task of tasks) {
+      this.renderGanttBar(timeline, task, start, totalMinutes);
     }
+  }
+
+  private renderGanttScale(parent: HTMLElement, start: moment.Moment, end: moment.Moment): void {
+    const scale = parent.createDiv({ cls: 'daily-todolist-gantt-scale' });
+    const months = scale.createDiv({ cls: 'daily-todolist-gantt-scale-months' });
+    const days = scale.createDiv({ cls: 'daily-todolist-gantt-scale-days' });
+    const cursor = start.clone().startOf('day');
+    let currentMonth = '';
+
+    while (cursor.isSameOrBefore(end, 'day')) {
+      const month = cursor.format('YYYY-MM');
+      if (month !== currentMonth) {
+        currentMonth = month;
+        months.createDiv({ cls: 'daily-todolist-gantt-scale-month', text: cursor.format('YYYY MMM') });
+      }
+      days.createDiv({
+        cls: cursor.isSame(window.moment(), 'day')
+          ? 'daily-todolist-gantt-scale-day is-today'
+          : 'daily-todolist-gantt-scale-day',
+        text: cursor.format('DD'),
+      });
+      cursor.add(1, 'day');
+    }
+  }
+
+  private renderTodayMarker(parent: HTMLElement, rangeStart: moment.Moment, totalMinutes: number): void {
+    const now = window.moment();
+    const left = (now.diff(rangeStart, 'minutes') / totalMinutes) * 100;
+    if (left < 0 || left > 100) return;
+
+    const marker = parent.createDiv({ cls: 'daily-todolist-gantt-today-marker' });
+    marker.style.left = `calc(112px + (100% - 112px) * ${left / 100})`;
+    marker.createSpan({ text: 'Today' });
+  }
+
+  private renderGanttBar(parent: HTMLElement, task: DailyTask, rangeStart: moment.Moment, totalMinutes: number): void {
+    const start = parseGanttMoment(task.startDate ?? task.dueDate ?? task.date);
+    const end = parseGanttMoment(task.endDate ?? task.dueDate ?? task.startDate ?? task.date, true);
+    const left = Math.max(0, Math.min(96, (start.diff(rangeStart, 'minutes') / totalMinutes) * 100));
+    const width = Math.max(4, Math.min(100 - left, (end.diff(start, 'minutes') / totalMinutes) * 100));
+    const option = this.getPriorityOption(task.priority);
+    const isOverdue = !task.completed && end.isBefore(window.moment());
+    const row = parent.createDiv({ cls: isOverdue ? 'daily-todolist-gantt-row is-overdue' : 'daily-todolist-gantt-row' });
+    const label = row.createDiv({ cls: 'daily-todolist-gantt-row-label' });
+    label.createDiv({ cls: 'daily-todolist-gantt-row-title', text: task.displayText || task.text });
+    label.createDiv({ cls: 'daily-todolist-gantt-row-date', text: `${start.format('MM-DD HH:mm')} → ${end.format('MM-DD HH:mm')}` });
+
+    const track = row.createDiv({ cls: 'daily-todolist-gantt-track' });
+    const bar = track.createDiv({ cls: task.completed ? 'daily-todolist-gantt-bar is-done' : 'daily-todolist-gantt-bar' });
+    bar.style.left = `${left}%`;
+    bar.style.width = `${width}%`;
+    bar.style.setProperty('--daily-todolist-priority-color', option?.color ?? 'var(--dtl-accent)');
+    bar.createSpan({ cls: 'daily-todolist-gantt-bar-title', text: task.displayText || task.text });
+    this.renderPriorityBadge(bar, task.priority);
   }
 
   private renderTaskList(root: HTMLElement, file: TFile, tasks: TodoTask[], emptyText: string): void {
@@ -244,6 +521,7 @@ export class DailyTodoListView extends ItemView {
     });
 
     const text = item.createDiv({ cls: 'daily-todolist-item-text', text: task.displayText || task.text });
+    this.renderPriorityBadge(text, task.priority);
     if (task.startDate || task.endDate || task.dueDate) {
       text.createDiv({
         cls: 'daily-todolist-task-meta',
@@ -251,16 +529,58 @@ export class DailyTodoListView extends ItemView {
       });
     }
 
-    item.createEl('button', { cls: 'daily-todolist-delete', text: '删除' })
+    const taskActions = item.createDiv({ cls: 'daily-todolist-task-actions' });
+    taskActions.createEl('button', { cls: 'daily-todolist-edit', text: '编辑' })
+      .addEventListener('click', () => this.openEditTaskModal(file, task));
+    taskActions.createEl('button', { cls: 'daily-todolist-delete', text: '删除' })
       .addEventListener('click', async () => {
         await this.deleteTask(file, task);
       });
+  }
+
+  private openEditTaskModal(file: TFile, task: TodoTask): void {
+    new EditTaskModal(this.app, task, this.plugin.settings.priorityOptions, async (value) => {
+      const taskText = formatTaskInput(value);
+      const content = await this.app.vault.read(file);
+      const nextContent = updateTaskInContent(content, task, taskText);
+      if (nextContent === null) {
+        new Notice('任务已变化，请刷新后重试');
+        await this.refresh();
+        return;
+      }
+
+      await this.app.vault.modify(file, nextContent);
+      this.clearCaches();
+      await this.refresh();
+    }).open();
+  }
+
+  private renderPriorityBadge(parent: HTMLElement, priority?: string): void {
+    const option = this.getPriorityOption(priority);
+    if (!option) return;
+
+    const badge = parent.createSpan({ cls: 'daily-todolist-priority-badge', text: option.label });
+    badge.style.setProperty('--daily-todolist-priority-color', option.color);
+  }
+
+  private getPriorityOption(priority?: string): PriorityOption | undefined {
+    if (!priority) return undefined;
+    return this.plugin.settings.priorityOptions.find((option) => (
+      option.id === priority || option.label === priority
+    ));
   }
 
   private async addTodoFromInput(): Promise<void> {
     const text = this.inputEl?.value.trim() ?? '';
     if (!text) return;
 
+    const taskText = formatTaskInput({
+      text,
+      startDate: this.startDateEl?.value.trim(),
+      endDate: this.endDateEl?.value.trim(),
+      dueDate: this.dueDateEl?.value.trim(),
+      priority: this.priorityEl?.value,
+    });
     const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
     if (!file) return;
 
@@ -268,11 +588,16 @@ export class DailyTodoListView extends ItemView {
     const nextContent = addTaskToContent(
       content,
       this.plugin.settings.todoHeading,
-      text,
+      taskText,
       this.plugin.settings.insertPosition,
     );
     await this.app.vault.modify(file, nextContent);
+    this.clearCaches();
     if (this.inputEl) this.inputEl.value = '';
+    if (this.startDateEl) this.startDateEl.value = '';
+    if (this.endDateEl) this.endDateEl.value = '';
+    if (this.dueDateEl) this.dueDateEl.value = '';
+    if (this.priorityEl) this.priorityEl.value = '';
     await this.refresh();
   }
 
@@ -286,6 +611,7 @@ export class DailyTodoListView extends ItemView {
     }
 
     await this.app.vault.modify(file, nextContent);
+    this.clearCaches();
     await this.refresh();
   }
 
@@ -299,6 +625,12 @@ export class DailyTodoListView extends ItemView {
     }
 
     await this.app.vault.modify(file, nextContent);
+    this.clearCaches();
     await this.refresh();
+  }
+
+  private clearCaches(): void {
+    this.monthCache.clear();
+    this.rangeCache.clear();
   }
 }

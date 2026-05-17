@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import type DailyTodoListPlugin from './main';
-import type { DailyTodoListSettings } from './types';
+import type { DailyTodoListSettings, PriorityOption } from './types';
 
 export const DEFAULT_SETTINGS: DailyTodoListSettings = {
   useDailyNotesPluginSettings: true,
@@ -14,6 +14,11 @@ export const DEFAULT_SETTINGS: DailyTodoListSettings = {
   calendarDefaultView: 'today',
   ganttLookbackDays: 14,
   ganttLookaheadDays: 30,
+  priorityOptions: [
+    { id: 'low', label: '低优先级', color: '#16a34a' },
+    { id: 'medium', label: '中优先级', color: '#d97706' },
+    { id: 'high', label: '高优先级', color: '#dc2626' },
+  ],
 };
 
 export class DailyTodoListSettingTab extends PluginSettingTab {
@@ -151,5 +156,35 @@ export class DailyTodoListSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
           this.plugin.refreshViews();
         }));
+
+    containerEl.createEl('h3', { text: '优先级' });
+    this.plugin.settings.priorityOptions.forEach((priority, index) => {
+      this.renderPrioritySetting(containerEl, priority, index);
+    });
+  }
+
+  private renderPrioritySetting(containerEl: HTMLElement, priority: PriorityOption, index: number): void {
+    const setting = new Setting(containerEl)
+      .setName(`优先级 ${index + 1}`)
+      .setDesc('设置添加任务时可选择的优先级名称和颜色。')
+      .addText((text) => text
+        .setPlaceholder('优先级名称')
+        .setValue(priority.label)
+        .onChange(async (value) => {
+          priority.label = value.trim() || priority.id;
+          await this.plugin.saveSettings();
+          this.plugin.refreshViews();
+        }));
+
+    const colorInput = setting.controlEl.createEl('input', {
+      type: 'color',
+      cls: 'daily-todolist-priority-color-input',
+    });
+    colorInput.value = priority.color;
+    colorInput.addEventListener('change', async () => {
+      priority.color = colorInput.value;
+      await this.plugin.saveSettings();
+      this.plugin.refreshViews();
+    });
   }
 }

@@ -142,6 +142,18 @@ export function toggleTaskInContent(content: string, task: TodoTask, completed: 
   return joinLines(lines, content);
 }
 
+export function updateTaskInContent(content: string, task: TodoTask, text: string): string | null {
+  const lines = splitLines(content);
+  const lineIndex = resolveTaskLine(lines, task);
+  if (lineIndex === -1) return null;
+
+  const match = /^(\s*[-*]\s+\[[ xX]])\s+.*$/.exec(lines[lineIndex]);
+  if (!match) return null;
+
+  lines[lineIndex] = `${match[1]} ${text.trim()}`;
+  return joinLines(lines, content);
+}
+
 export function deleteTaskFromContent(content: string, task: TodoTask): string | null {
   const lines = splitLines(content);
   const lineIndex = resolveTaskLine(lines, task);

@@ -61,7 +61,12 @@ export default class DailyTodoListPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loaded = await this.loadData();
+    this.settings = {
+      ...DEFAULT_SETTINGS,
+      ...loaded,
+      priorityOptions: loaded?.priorityOptions ?? DEFAULT_SETTINGS.priorityOptions,
+    };
   }
 
   async saveSettings(): Promise<void> {

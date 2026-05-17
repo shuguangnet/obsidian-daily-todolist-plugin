@@ -3,18 +3,31 @@ import type DailyTodoListPlugin from './main';
 import { getOrCreateTodayDailyNote, openTodayDailyNote } from './daily-note';
 import { addTaskToContent } from './markdown-tasks';
 import { createMermaidGantt, readTasksForDateRange, scheduledTasks } from './schedule';
+import { formatTaskInput } from './task-format';
+import type { PriorityOption } from './types';
 
 class AddTodoModal extends Modal {
   private text = '';
+  private startDate = '';
+  private endDate = '';
+  private dueDate = '';
+  private priority = '';
   private onSubmit: (text: string) => void;
+  private priorityOptions: PriorityOption[];
 
-  constructor(app: App, onSubmit: (text: string) => void) {
+  constructor(app: App, priorityOptions: PriorityOption[], onSubmit: (text: string) => void) {
     super(app);
+    this.priorityOptions = priorityOptions;
     this.onSubmit = onSubmit;
   }
 
   onOpen(): void {
     this.setTitle('添加今日待办');
+    this.contentEl.addClass('daily-todolist-modal');
+    this.contentEl.createDiv({
+      cls: 'daily-todolist-modal-hint',
+      text: '可选填写开始/结束时间，任务会自动进入甘特图排期。',
+    });
 
     new Setting(this.contentEl)
       .setName('任务内容')
@@ -29,18 +42,64 @@ class AddTodoModal extends Modal {
         text.inputEl.focus();
       });
 
+    this.createDateTimePicker('开始时间', '可选，用于甘特图起点。', (value) => {
+      this.startDate = value;
+    });
+
+    this.createDateTimePicker('结束时间', '可选，用于甘特图终点。', (value) => {
+      this.endDate = value;
+    });
+
+    this.createDateTimePicker('到期时间', '可选；没有开始/结束时间时作为单日排期。', (value) => {
+      this.dueDate = value;
+    });
+
+    this.createPriorityPicker();
+
     new Setting(this.contentEl)
       .addButton((button) => button
-        .setButtonText('添加')
+        .setButtonText('添加到今日')
         .setCta()
         .onClick(() => this.submit()));
+  }
+
+  private createDateTimePicker(name: string, desc: string, onChange: (value: string) => void): void {
+    const setting = new Setting(this.contentEl)
+      .setName(name)
+      .setDesc(desc);
+    const input = setting.controlEl.createEl('input', {
+      type: 'datetime-local',
+      cls: 'daily-todolist-date-input',
+    });
+    input.addEventListener('change', () => onChange(input.value.trim()));
+  }
+
+  private createPriorityPicker(): void {
+    new Setting(this.contentEl)
+      .setName('优先级')
+      .setDesc('可选，用于任务列表颜色标记。')
+      .addDropdown((dropdown) => {
+        dropdown.addOption('', '无优先级');
+        for (const option of this.priorityOptions) {
+          dropdown.addOption(option.id, option.label);
+        }
+        dropdown.onChange((value) => {
+          this.priority = value;
+        });
+      });
   }
 
   private submit(): void {
     const value = this.text.trim();
     if (!value) return;
     this.close();
-    this.onSubmit(value);
+    this.onSubmit(formatTaskInput({
+      text: value,
+      startDate: this.startDate,
+      endDate: this.endDate,
+      dueDate: this.dueDate,
+      priority: this.priority,
+    }));
   }
 }
 
@@ -55,7 +114,7 @@ export function registerDailyTodoListCommands(plugin: DailyTodoListPlugin): void
     id: 'add-todo-to-today',
     name: 'Add todo to today',
     callback: () => {
-      new AddTodoModal(plugin.app, async (text) => {
+      new AddTodoModal(plugin.app, plugin.settings.priorityOptions, async (text) => {
         const file = await getOrCreateTodayDailyNote(plugin.app, plugin.settings);
         if (!file) return;
 

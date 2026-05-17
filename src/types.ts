@@ -10,6 +10,13 @@ export interface DailyTodoListSettings {
   calendarDefaultView: 'today' | 'calendar' | 'gantt';
   ganttLookbackDays: number;
   ganttLookaheadDays: number;
+  priorityOptions: PriorityOption[];
+}
+
+export interface PriorityOption {
+  id: string;
+  label: string;
+  color: string;
 }
 
 export interface TodoTask {
@@ -22,6 +29,7 @@ export interface TodoTask {
   startDate?: string;
   endDate?: string;
   dueDate?: string;
+  priority?: string;
 }
 
 export interface DailyTask extends TodoTask {
