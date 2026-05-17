@@ -1,11 +1,12 @@
-# Daily TodoList Obsidian Plugin 设计文档
+# Vault Atlas HQ Obsidian Plugin 设计文档
 
 ## 设计概述
 
 ### 目标
 
-- 以 Daily Note Markdown checkbox 作为唯一数据源管理每日待办。
-- 支持在侧边栏查看今日任务、月历汇总和甘特图排期。
+- 提供一个可作为 Obsidian 知识库主页使用的侧边栏总控台。
+- 扫描 Vault 级别的目录、标签、链接、frontmatter 和活跃度，用于分类和统计展示。
+- 以 Daily Note Markdown checkbox 作为日常执行层的数据源，保留今日待办、备忘录、月历和甘特图。
 - 保持实现轻量，不引入 React 或外部运行时依赖。
 
 ### 非目标
@@ -24,6 +25,7 @@ Obsidian Commands / Ribbon
 DailyTodoListPlugin
           │
           ├── DailyTodoListView
+          │     ├── Vault Atlas 首页
           │     ├── 今日任务 CRUD
           │     ├── 日历汇总
           │     └── Mermaid 甘特图预览
@@ -32,17 +34,19 @@ DailyTodoListPlugin
           ├── markdown-tasks.ts  TodoList 标题区块解析与最小化写入
           ├── calendar.ts        月历网格与每日统计
           └── schedule.ts        排期元数据解析与 Mermaid gantt 生成
+          └── vault-analytics.ts Vault 全局分类与统计分析
 ```
 
 ## 核心组件
 
 - **DailyTodoListPlugin**：插件入口，加载设置、注册视图、命令和设置页。
-- **DailyTodoListView**：侧边栏主视图，包含今日、日历、甘特图三个页签。
+- **DailyTodoListView**：侧边栏主视图，包含知识库首页、今日、备忘录、日历、甘特图和统计页签。
 - **AddTodoModal**：命令面板添加今日待办的输入弹窗。
 - **DailyTodoListSettingTab**：插件设置页。
 - **markdown-tasks.ts**：只在指定标题区块内解析和修改 checkbox 行。
 - **schedule.ts**：解析 `[start::]`、`[end::]`、`[due::]`、`[priority::]` 和 `📅` 元数据，并生成 Mermaid 甘特图。
 - **calendar.ts**：按月份读取 Daily Note 汇总每日任务数量。
+- **vault-analytics.ts**：扫描 Vault 内 Markdown 文件，聚合目录、标签、frontmatter、链接、字数和最近活跃度。
 
 ## 数据模型
 
@@ -71,6 +75,7 @@ DailyTodoListPlugin
 | 2026-05-17 | 使用内联字段保存排期 | 与 Obsidian / Dataview 风格兼容 | 需要用户按约定书写日期 |
 | 2026-05-17 | 甘特图使用 Mermaid 渲染 | Obsidian 原生支持 Markdown 代码块渲染 | 不实现自定义拖拽甘特编辑 |
 | 2026-05-17 | 使用内联字段保存优先级 | 继续保持 Markdown 可读和可迁移 | 优先级颜色由插件设置负责展示 |
+| 2026-05-17 | 首页统计基于 Vault 实时扫描 | 保证知识库总览不依赖额外索引数据库 | 大型 Vault 下刷新成本随笔记数增长 |
 
 ## 安全考量
 
@@ -103,3 +108,9 @@ DailyTodoListPlugin
 ### 2026-05-17 - 初始版本
 
 - 创建最小可用 Obsidian Daily TodoList 插件。
+
+### 2026-05-17 - Vault Atlas 首页
+
+- 新增 Vault 级别的数据扫描模块，统计目录、标签、frontmatter、链接和活跃度。
+- 首页升级为知识库总控台，展示分类榜单、活跃图、最近更新和沉睡笔记。
+- 统计页新增 Vault 级指标，支持从“任务管理”扩展到“知识库运营”视角。

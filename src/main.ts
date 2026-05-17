@@ -2,10 +2,12 @@ import { Plugin } from 'obsidian';
 import { registerDailyTodoListCommands } from './commands';
 import { DAILY_TODOLIST_VIEW_TYPE, DailyTodoListView, type DailyTodoListTab } from './view';
 import { DailyTodoListSettingTab, DEFAULT_SETTINGS } from './settings';
-import type { DailyTodoListSettings } from './types';
+import { analyzeVault } from './vault-analytics';
+import type { DailyTodoListSettings, VaultAnalytics } from './types';
 
 export default class DailyTodoListPlugin extends Plugin {
   settings: DailyTodoListSettings;
+  private vaultAnalyticsPromise: Promise<VaultAnalytics> | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -18,9 +20,14 @@ export default class DailyTodoListPlugin extends Plugin {
     registerDailyTodoListCommands(this);
     this.addSettingTab(new DailyTodoListSettingTab(this.app, this));
 
-    this.addRibbonIcon('check-square', 'Daily TodoList', () => {
+    this.addRibbonIcon('layout-dashboard', 'Vault Atlas HQ', () => {
       this.activateView();
     });
+
+    this.registerEvent(this.app.vault.on('create', () => this.invalidateVaultAnalytics()));
+    this.registerEvent(this.app.vault.on('modify', () => this.invalidateVaultAnalytics()));
+    this.registerEvent(this.app.vault.on('delete', () => this.invalidateVaultAnalytics()));
+    this.registerEvent(this.app.vault.on('rename', () => this.invalidateVaultAnalytics()));
 
     if (this.settings.openViewOnStartup) {
       this.app.workspace.onLayoutReady(() => {
@@ -58,6 +65,17 @@ export default class DailyTodoListPlugin extends Plugin {
         view.refresh();
       }
     }
+  }
+
+  async getVaultAnalytics(forceRefresh = false): Promise<VaultAnalytics> {
+    if (forceRefresh || !this.vaultAnalyticsPromise) {
+      this.vaultAnalyticsPromise = analyzeVault(this.app);
+    }
+    return this.vaultAnalyticsPromise;
+  }
+
+  invalidateVaultAnalytics(): void {
+    this.vaultAnalyticsPromise = null;
   }
 
   async loadSettings(): Promise<void> {

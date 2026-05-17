@@ -14,7 +14,15 @@ import { addMemoToContent, deleteMemoFromContent, parseMemosFromContent, readMem
 import { formatTaskInput, validateTaskScheduleInput } from './task-format';
 import { EditTaskModal } from './edit-task-modal';
 import { getPriorityOption, renderPriorityBadge } from './ui';
-import type { CalendarDaySummary, DailyMemo, DailyTask, TodoTask } from './types';
+import type {
+  CalendarDaySummary,
+  DailyMemo,
+  DailyTask,
+  RankedStat,
+  TimelinePoint,
+  TodoTask,
+  VaultNoteProfile,
+} from './types';
 
 export const DAILY_TODOLIST_VIEW_TYPE = 'daily-todolist-view';
 export type DailyTodoListTab = 'home' | 'today' | 'memo' | 'calendar' | 'gantt' | 'stats';
@@ -53,11 +61,11 @@ export class DailyTodoListView extends ItemView {
   }
 
   getDisplayText(): string {
-    return 'Daily TodoList';
+    return 'Vault Atlas HQ';
   }
 
   getIcon(): string {
-    return 'check-square';
+    return 'layout-dashboard';
   }
 
   async onOpen(): Promise<void> {
@@ -107,7 +115,7 @@ export class DailyTodoListView extends ItemView {
 
   private renderHeader(root: HTMLElement): void {
     const header = root.createDiv({ cls: 'daily-todolist-header' });
-    header.createDiv({ cls: 'daily-todolist-title', text: 'Daily TodoList' });
+    header.createDiv({ cls: 'daily-todolist-title', text: 'Vault Atlas HQ' });
     header.createDiv({ text: window.moment().format('YYYY-MM-DD') });
 
     const tabs = root.createDiv({ cls: 'daily-todolist-tabs daily-todolist-tabs-wide' });
@@ -192,38 +200,59 @@ export class DailyTodoListView extends ItemView {
     root.empty();
     const today = window.moment().format('YYYY-MM-DD');
     const { start, end } = this.getMonthRange();
-    const [tasks, memos] = await Promise.all([
+    const [tasks, memos, analytics] = await Promise.all([
       this.getRangeTasks(start, end),
       readMemosForDateRange(this.app, this.plugin.settings, start, end),
+      this.plugin.getVaultAnalytics(),
     ]);
     if (!this.canRender(refreshId)) return;
 
     const todayTasks = tasks.filter((task) => task.date === today);
     const todayMemos = memos.filter((memo) => memo.date === today);
-    const completed = tasks.filter((task) => task.completed).length;
-    const planned = scheduledTasks(tasks);
-
-    const hero = root.createDiv({ cls: 'daily-todolist-home-hero' });
-    hero.createDiv({ cls: 'daily-todolist-gantt-kicker', text: 'Daily Overview' });
-    hero.createDiv({ cls: 'daily-todolist-gantt-hero-title', text: '今日文档概览' });
+    const hero = root.createDiv({ cls: 'daily-todolist-home-hero daily-todolist-atlas-hero' });
+    hero.createDiv({ cls: 'daily-todolist-gantt-kicker', text: 'Knowledge Atlas' });
+    hero.createDiv({ cls: 'daily-todolist-gantt-hero-title', text: '你的知识库总控台' });
     hero.createDiv({
       cls: 'daily-todolist-gantt-hero-subtitle',
-      text: `${today} · 本月 ${tasks.length} 个待办 / ${memos.length} 条备忘录`,
+      text: `${today} · ${analytics.totalNotes} 篇笔记 · ${analytics.totalTags} 个标签 · ${analytics.totalFolders} 个目录`,
     });
+    const pulse = hero.createDiv({ cls: 'daily-todolist-atlas-pulse' });
+    pulse.createDiv({
+      cls: 'daily-todolist-atlas-pulse-value',
+      text: analytics.weeklyGrowth >= 0 ? `+${analytics.weeklyGrowth}` : String(analytics.weeklyGrowth),
+    });
+    pulse.createDiv({ cls: 'daily-todolist-atlas-pulse-label', text: '近 7 天活跃变化' });
 
     const cards = root.createDiv({ cls: 'daily-todolist-overview-grid' });
-    this.renderOverviewCard(cards, '今日待办', `${todayTasks.filter((task) => task.completed).length}/${todayTasks.length}`, '完成进度');
-    this.renderOverviewCard(cards, '今日备忘录', String(todayMemos.length), this.plugin.settings.memoHeading);
-    this.renderOverviewCard(cards, '本月排期', String(planned.length), `${start} → ${end}`);
-    this.renderOverviewCard(cards, '本月完成率', tasks.length === 0 ? '0%' : `${Math.round((completed / tasks.length) * 100)}%`, `${completed}/${tasks.length}`);
+    this.renderOverviewCard(cards, '知识库笔记', String(analytics.totalNotes), `${analytics.totalWords.toLocaleString()} 字内容`);
+    this.renderOverviewCard(cards, '近 7 天更新', String(analytics.recentNotes), analytics.weeklyGrowth >= 0 ? `较上周 +${analytics.weeklyGrowth}` : `较上周 ${analytics.weeklyGrowth}`);
+    this.renderOverviewCard(cards, '孤岛笔记', String(analytics.orphanNotes), `${analytics.totalInboundLinks} 条入链 / ${analytics.totalOutboundLinks} 条出链`);
+    this.renderOverviewCard(cards, '今日捕捉', `${todayTasks.length} 待办`, `${todayMemos.length} 条备忘录`);
 
     const quick = root.createDiv({ cls: 'daily-todolist-home-actions' });
+    quick.createEl('button', { text: '刷新首页' }).addEventListener('click', async () => {
+      this.plugin.invalidateVaultAnalytics();
+      await this.refresh();
+    });
     this.renderQuickTabButton(quick, 'today', '记录待办');
     this.renderQuickTabButton(quick, 'memo', '写备忘录');
     this.renderQuickTabButton(quick, 'stats', '查看统计');
     quick.createEl('button', { text: '打开今日笔记' }).addEventListener('click', () => {
       openTodayDailyNote(this.app, this.plugin.settings);
     });
+
+    const atlasGrid = root.createDiv({ cls: 'daily-todolist-atlas-grid' });
+    this.renderRankedCard(atlasGrid, '目录分布', '按顶层目录聚合', analytics.topFolders, '还没有目录数据。');
+    this.renderRankedCard(atlasGrid, '标签热区', '最常被使用的标签', analytics.topTags, '还没有标签数据。');
+    this.renderRankedCard(atlasGrid, '结构字段', 'frontmatter 最常见字段', analytics.topFrontmatterKeys, '还没有 frontmatter。');
+
+    const insightRow = root.createDiv({ cls: 'daily-todolist-insight-grid' });
+    this.renderActivityCard(insightRow, analytics.activityLast7Days);
+    this.renderRankedCard(insightRow, '链接枢纽', '被最多笔记引用的核心节点', analytics.topLinkedNotes, '还没有链接热点。', true);
+
+    const noteRow = root.createDiv({ cls: 'daily-todolist-insight-grid' });
+    this.renderNoteCard(noteRow, '最近更新', '最新被修改的笔记', analytics.recentlyUpdatedNotes, (note) => this.formatRelativeTime(note.updatedAt));
+    this.renderNoteCard(noteRow, '沉睡但有料', '字数高但链接薄弱，适合继续整理', analytics.quietNotes, (note) => `${note.wordCount} 字 · ${note.inboundLinks}/${note.outboundLinks} 链接`);
 
     root.createEl('h3', { text: '今日待办' });
     const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
@@ -264,9 +293,10 @@ export class DailyTodoListView extends ItemView {
   private async renderStats(root: HTMLElement, refreshId: number): Promise<void> {
     root.empty();
     const { start, end } = this.getMonthRange();
-    const [tasks, memos] = await Promise.all([
+    const [tasks, memos, analytics] = await Promise.all([
       this.getRangeTasks(start, end),
       readMemosForDateRange(this.app, this.plugin.settings, start, end),
+      this.plugin.getVaultAnalytics(),
     ]);
     if (!this.canRender(refreshId)) return;
 
@@ -279,18 +309,31 @@ export class DailyTodoListView extends ItemView {
     }).length;
     const memoDays = new Set(memos.map((memo) => memo.date)).size;
 
-    root.createDiv({ cls: 'daily-todolist-stats-title', text: `${window.moment(start).format('YYYY年MM月')} 统计` });
+    root.createDiv({ cls: 'daily-todolist-stats-title', text: `${window.moment(start).format('YYYY年MM月')} 知识库统计` });
     const cards = root.createDiv({ cls: 'daily-todolist-overview-grid' });
     this.renderOverviewCard(cards, '待办总数', String(tasks.length), `${completed} 已完成 / ${active} 未完成`);
-    this.renderOverviewCard(cards, '完成率', tasks.length === 0 ? '0%' : `${Math.round((completed / tasks.length) * 100)}%`, 'TodoList');
+    this.renderOverviewCard(cards, '知识库标签', String(analytics.totalTags), `${analytics.notesWithFrontmatter} 篇有 frontmatter`);
     this.renderOverviewCard(cards, '排期任务', String(planned.length), overdue > 0 ? `${overdue} 个已逾期` : '无逾期');
+    this.renderOverviewCard(cards, '未解析链接', String(analytics.unresolvedLinks), `${analytics.orphanNotes} 篇孤岛笔记`);
     this.renderOverviewCard(cards, '备忘录', String(memos.length), `${memoDays} 天有记录`);
+    this.renderOverviewCard(cards, '平均篇幅', `${analytics.averageWordsPerNote}`, '每篇笔记平均字数');
 
     const bars = root.createDiv({ cls: 'daily-todolist-stats-bars' });
     this.renderStatsBar(bars, '已完成', completed, tasks.length);
     this.renderStatsBar(bars, '未完成', active, tasks.length);
     this.renderStatsBar(bars, '有排期', planned.length, tasks.length);
     this.renderStatsBar(bars, '备忘录活跃天', memoDays, window.moment(end).diff(window.moment(start), 'days') + 1);
+    this.renderStatsBar(bars, 'Frontmatter 覆盖', analytics.notesWithFrontmatter, analytics.totalNotes);
+    this.renderStatsBar(bars, '任务型笔记', analytics.notesWithTasks, analytics.totalNotes);
+
+    const atlasGrid = root.createDiv({ cls: 'daily-todolist-atlas-grid' });
+    this.renderRankedCard(atlasGrid, '目录层级', '观察知识库结构深度', analytics.folderDepthBands, '还没有结构分布。');
+    this.renderRankedCard(atlasGrid, '标签热度', '常用语义分类', analytics.topTags, '还没有标签数据。');
+    this.renderRankedCard(atlasGrid, '链接中枢', '最值得放到首页的枢纽笔记', analytics.topLinkedNotes, '还没有链接中心。', true);
+
+    const noteRow = root.createDiv({ cls: 'daily-todolist-insight-grid' });
+    this.renderActivityCard(noteRow, analytics.activityLast7Days);
+    this.renderNoteCard(noteRow, '新建笔记', '最近创建的内容', analytics.newestNotes, (note) => this.formatDateTime(note.createdAt));
 
     root.createEl('h3', { text: '最近备忘录' });
     this.renderMemoList(root, memos.slice(-8).reverse(), '本月还没有备忘录。');
@@ -309,6 +352,95 @@ export class DailyTodoListView extends ItemView {
     card.createDiv({ cls: 'daily-todolist-overview-value', text: value });
     card.createDiv({ cls: 'daily-todolist-overview-label', text: label });
     card.createDiv({ cls: 'daily-todolist-overview-detail', text: detail });
+  }
+
+  private renderRankedCard(
+    parent: HTMLElement,
+    title: string,
+    subtitle: string,
+    items: RankedStat[],
+    emptyText: string,
+    openPath = false,
+  ): void {
+    const card = parent.createDiv({ cls: 'daily-todolist-insight-card' });
+    card.createDiv({ cls: 'daily-todolist-insight-title', text: title });
+    card.createDiv({ cls: 'daily-todolist-insight-subtitle', text: subtitle });
+    if (items.length === 0) {
+      card.createDiv({ cls: 'daily-todolist-empty', text: emptyText });
+      return;
+    }
+
+    const list = card.createDiv({ cls: 'daily-todolist-ranked-list' });
+    const max = Math.max(...items.map((item) => item.value), 1);
+    items.forEach((item, index) => {
+      const row = list.createDiv({ cls: 'daily-todolist-ranked-row' });
+      if (openPath && item.path) {
+        row.addClass('is-clickable');
+        row.addEventListener('click', async () => this.openVaultFile(item.path!));
+      }
+      row.style.setProperty('--daily-todolist-rank-accent', item.accent ?? 'var(--dtl-accent)');
+      row.createDiv({ cls: 'daily-todolist-ranked-index', text: `${index + 1}` });
+      const copy = row.createDiv({ cls: 'daily-todolist-ranked-copy' });
+      copy.createDiv({ cls: 'daily-todolist-ranked-label', text: item.label });
+      if (item.hint) {
+        copy.createDiv({ cls: 'daily-todolist-ranked-hint', text: item.hint });
+      }
+      const metric = row.createDiv({ cls: 'daily-todolist-ranked-metric' });
+      metric.createDiv({ cls: 'daily-todolist-ranked-value', text: String(item.value) });
+      const bar = metric.createDiv({ cls: 'daily-todolist-ranked-bar' });
+      const fill = bar.createDiv({ cls: 'daily-todolist-ranked-bar-fill' });
+      fill.style.width = `${Math.max(12, Math.round((item.value / max) * 100))}%`;
+    });
+  }
+
+  private renderActivityCard(parent: HTMLElement, points: TimelinePoint[]): void {
+    const card = parent.createDiv({ cls: 'daily-todolist-insight-card daily-todolist-activity-card' });
+    card.createDiv({ cls: 'daily-todolist-insight-title', text: '最近 7 天活跃度' });
+    card.createDiv({ cls: 'daily-todolist-insight-subtitle', text: '按笔记更新时间统计每日活跃数' });
+    const chart = card.createDiv({ cls: 'daily-todolist-activity-chart' });
+    const max = Math.max(...points.map((point) => point.value), 1);
+    for (const point of points) {
+      const column = chart.createDiv({ cls: 'daily-todolist-activity-column' });
+      column.createDiv({ cls: 'daily-todolist-activity-value', text: String(point.value) });
+      const bar = column.createDiv({ cls: 'daily-todolist-activity-bar' });
+      bar.style.height = `${Math.max(14, Math.round((point.value / max) * 128))}px`;
+      column.createDiv({ cls: 'daily-todolist-activity-label', text: point.label });
+    }
+  }
+
+  private renderNoteCard(
+    parent: HTMLElement,
+    title: string,
+    subtitle: string,
+    notes: VaultNoteProfile[],
+    meta: (note: VaultNoteProfile) => string,
+  ): void {
+    const card = parent.createDiv({ cls: 'daily-todolist-insight-card' });
+    card.createDiv({ cls: 'daily-todolist-insight-title', text: title });
+    card.createDiv({ cls: 'daily-todolist-insight-subtitle', text: subtitle });
+    if (notes.length === 0) {
+      card.createDiv({ cls: 'daily-todolist-empty', text: '还没有可展示的笔记。' });
+      return;
+    }
+
+    const list = card.createDiv({ cls: 'daily-todolist-note-list' });
+    for (const note of notes) {
+      const item = list.createDiv({ cls: 'daily-todolist-note-row' });
+      item.addEventListener('click', async () => this.openVaultFile(note.path));
+      const header = item.createDiv({ cls: 'daily-todolist-note-header' });
+      header.createDiv({ cls: 'daily-todolist-note-title', text: note.name });
+      header.createDiv({ cls: 'daily-todolist-note-meta', text: meta(note) });
+      item.createDiv({ cls: 'daily-todolist-note-folder', text: note.folder });
+      item.createDiv({ cls: 'daily-todolist-note-preview', text: note.preview || '这篇笔记还没有正文摘要。' });
+    }
+  }
+
+  private formatRelativeTime(value: number): string {
+    return window.moment(value).fromNow();
+  }
+
+  private formatDateTime(value: number): string {
+    return window.moment(value).format('MM-DD HH:mm');
   }
 
   private renderQuickTabButton(parent: HTMLElement, tab: DailyTodoListTab, text: string): void {
@@ -671,19 +803,17 @@ export class DailyTodoListView extends ItemView {
   }
 
   private async openTaskSource(task: DailyTask): Promise<void> {
-    const file = this.app.vault.getAbstractFileByPath(task.filePath);
-    if (!(file instanceof TFile)) {
-      new Notice('来源 Daily Note 不存在');
-      return;
-    }
-
-    await this.app.workspace.getLeaf(false).openFile(file);
+    await this.openVaultFile(task.filePath, '来源 Daily Note 不存在');
   }
 
   private async openMemoSource(memo: DailyMemo): Promise<void> {
-    const file = this.app.vault.getAbstractFileByPath(memo.filePath);
+    await this.openVaultFile(memo.filePath, '来源 Daily Note 不存在');
+  }
+
+  private async openVaultFile(path: string, missingText = '来源文件不存在'): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
-      new Notice('来源 Daily Note 不存在');
+      new Notice(missingText);
       return;
     }
 
@@ -806,5 +936,6 @@ export class DailyTodoListView extends ItemView {
   private clearCaches(): void {
     this.monthCache.clear();
     this.rangeCache.clear();
+    this.plugin.invalidateVaultAnalytics();
   }
 }

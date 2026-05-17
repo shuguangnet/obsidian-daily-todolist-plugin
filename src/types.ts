@@ -56,3 +56,59 @@ export interface CalendarDaySummary {
   completed: number;
   scheduled: number;
 }
+
+export interface RankedStat {
+  label: string;
+  value: number;
+  hint?: string;
+  path?: string;
+  accent?: string;
+}
+
+export interface TimelinePoint {
+  date: string;
+  label: string;
+  value: number;
+}
+
+export interface VaultNoteProfile {
+  path: string;
+  name: string;
+  folder: string;
+  topFolder: string;
+  tags: string[];
+  frontmatterKeys: string[];
+  wordCount: number;
+  outboundLinks: number;
+  inboundLinks: number;
+  createdAt: number;
+  updatedAt: number;
+  preview: string;
+  isOrphan: boolean;
+}
+
+export interface VaultAnalytics {
+  generatedAt: number;
+  totalNotes: number;
+  totalFolders: number;
+  totalTags: number;
+  totalWords: number;
+  totalOutboundLinks: number;
+  totalInboundLinks: number;
+  unresolvedLinks: number;
+  orphanNotes: number;
+  notesWithFrontmatter: number;
+  notesWithTasks: number;
+  recentNotes: number;
+  weeklyGrowth: number;
+  averageWordsPerNote: number;
+  activityLast7Days: TimelinePoint[];
+  topFolders: RankedStat[];
+  topTags: RankedStat[];
+  topFrontmatterKeys: RankedStat[];
+  topLinkedNotes: RankedStat[];
+  folderDepthBands: RankedStat[];
+  recentlyUpdatedNotes: VaultNoteProfile[];
+  newestNotes: VaultNoteProfile[];
+  quietNotes: VaultNoteProfile[];
+}

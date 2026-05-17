@@ -125,7 +125,7 @@ class AddTodoModal extends Modal {
 export function registerDailyTodoListCommands(plugin: DailyTodoListPlugin): void {
   plugin.addCommand({
     id: 'open-daily-todolist-view',
-    name: 'Open Daily TodoList view',
+    name: 'Open Vault Atlas HQ',
     callback: () => plugin.activateView(),
   });
 
@@ -153,7 +153,7 @@ export function registerDailyTodoListCommands(plugin: DailyTodoListPlugin): void
 
   plugin.addCommand({
     id: 'open-calendar-view',
-    name: 'Open Daily TodoList calendar',
+    name: 'Open Vault Atlas calendar',
     callback: async () => {
       await plugin.activateView('calendar');
     },
@@ -161,7 +161,7 @@ export function registerDailyTodoListCommands(plugin: DailyTodoListPlugin): void
 
   plugin.addCommand({
     id: 'open-gantt-view',
-    name: 'Open Daily TodoList gantt',
+    name: 'Open Vault Atlas gantt',
     callback: async () => {
       await plugin.activateView('gantt');
     },

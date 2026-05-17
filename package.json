@@ -1,7 +1,7 @@
 {
   "name": "obsidian-daily-todolist",
   "version": "0.1.0",
-  "description": "Daily TodoList plugin for Obsidian",
+  "description": "Vault Atlas HQ plugin for Obsidian",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -9,7 +9,8 @@
   },
   "keywords": [
     "obsidian",
-    "todolist",
+    "dashboard",
+    "knowledge-base",
     "daily-notes"
   ],
   "author": "shuguang",

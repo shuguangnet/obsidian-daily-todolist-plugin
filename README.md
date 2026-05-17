@@ -1,15 +1,15 @@
-# Daily TodoList Obsidian Plugin
+# Vault Atlas HQ Obsidian Plugin
 
-Daily TodoList 是一个以 Daily Note Markdown 为唯一数据源的 Obsidian 待办插件。它在每日笔记的指定标题区块中管理 checkbox 与备忘录，并提供首页概览、今日视图、备忘录、月历汇总、统计面板、高级时间轴甘特图和 Mermaid 甘特图导出。
+Vault Atlas HQ 是一个面向 Obsidian 知识库主页的插件。它一边保留 Daily Note 待办、备忘录、日历和甘特图能力，一边把首页和统计页升级成整个 Vault 的总控台，用来展示目录分类、标签热度、链接枢纽、结构字段、最近更新和活跃趋势。
 
 ## 特性
 
-- **首页概览**：汇总今日待办、今日备忘录、本月排期和完成率，并提供快速跳转入口。
+- **知识库首页**：展示笔记总量、近 7 天活跃度、孤岛笔记、目录分布、标签热区、frontmatter 字段、链接枢纽和最近更新。
 - **今日待办**：在今日 Daily Note 的 `## TodoList` 区块中添加、编辑、完成、取消完成和删除任务。
 - **备忘录**：在今日 Daily Note 的 `## Memo` 区块中追加普通列表备忘录，并支持查看、打开来源和删除。
 - **日历视图**：按月查看每日待办数量、完成数量和带排期任务数量，并可点击日期查看当天任务。
 - **甘特图排期**：读取任务中的排期元数据，提供高级时间轴视图，并可渲染 / 插入 Mermaid gantt。
-- **统计面板**：按当前月份统计 TodoList 总数、完成率、排期任务、逾期任务、备忘录数量和活跃记录天数。
+- **统计面板**：按当前月份统计 TodoList 与 Memo，同时补充 Vault 级别的标签、frontmatter、未解析链接、结构层级和新建笔记数据。
 - **优先级标记**：添加任务时可选择优先级，并按设置页配置的颜色展示在任务卡片和甘特图任务条中。
 - **命令面板**：支持打开今日视图、日历视图、甘特图视图、添加今日待办、打开今日笔记、插入甘特图到今日笔记。
 - **设置页**：支持 Daily Notes 设置复用、标题名、插入位置、显示已完成、自动创建 Daily Note、默认视图、甘特图读取范围和优先级颜色。
@@ -59,7 +59,7 @@ Daily TodoList 是一个以 Daily Note Markdown 为唯一数据源的 Obsidian �
 
 ### 首页
 
-首页展示今日文档概览，包括今日待办完成进度、今日备忘录数量、本月排期任务数和本月完成率，并提供跳转到待办、备忘录、统计和今日笔记的快捷入口。
+首页是知识库控制面板。它会扫描整个 Vault 的 Markdown 笔记，展示总笔记数、最近活跃度、孤岛笔记、顶层目录分布、标签热区、frontmatter 字段、链接中枢、最近更新笔记以及适合继续整理的“沉睡笔记”，同时保留今日待办和备忘录作为快速操作入口。
 
 ### 今日视图
 
@@ -75,7 +75,7 @@ Daily TodoList 是一个以 Daily Note Markdown 为唯一数据源的 Obsidian �
 
 ### 统计视图
 
-统计视图按当前月份聚合 TodoList 和 Memo 数据，展示待办总数、完成率、排期任务、逾期任务、备忘录总数和有记录的天数，并用进度条呈现核心比例。
+统计视图按当前月份聚合 TodoList 和 Memo 数据，同时叠加整个 Vault 的标签数、frontmatter 覆盖率、未解析链接、平均篇幅、目录层级分布、链接中枢和新建笔记清单。
 
 ### 甘特图视图
 
@@ -103,7 +103,7 @@ npm run build
 .obsidian/plugins/obsidian-daily-todolist/
 ```
 
-3. 在 Obsidian Community plugins 中重新加载并启用 `Daily TodoList`。
+3. 在 Obsidian Community plugins 中重新加载并启用 `Vault Atlas HQ`。
 
 ## 命令
 

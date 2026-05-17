@@ -1,19 +1,24 @@
 .daily-todolist-view {
-  --dtl-accent: #2563eb;
-  --dtl-accent-soft: rgba(37, 99, 235, 0.12);
+  --dtl-accent: #e96a3a;
+  --dtl-accent-soft: color-mix(in srgb, var(--dtl-accent) 16%, transparent);
+  --dtl-accent-2: #2a7f78;
+  --dtl-accent-3: #f0c15a;
   --dtl-surface: var(--background-primary);
   --dtl-surface-muted: var(--background-secondary);
   --dtl-border: var(--background-modifier-border);
   --dtl-border-strong: var(--background-modifier-border-hover);
-  --dtl-radius: 12px;
-  --dtl-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --dtl-radius: 16px;
+  --dtl-shadow: 0 10px 30px rgba(24, 22, 20, 0.08);
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-height: 100%;
   padding: 14px;
   overflow: auto;
-  background: var(--background-primary);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--dtl-accent) 8%, transparent), transparent 26%),
+    radial-gradient(circle at 0% 20%, color-mix(in srgb, var(--dtl-accent-2) 8%, transparent), transparent 30%),
+    var(--background-primary);
 }
 
 .daily-todolist-body {
@@ -43,9 +48,10 @@
 
 .daily-todolist-title {
   color: var(--text-normal);
-  font-size: 1.1em;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.18em;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 
 .daily-todolist-actions {
@@ -348,14 +354,61 @@
 
 .daily-todolist-home-hero {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
   overflow: hidden;
-  padding: 18px;
+  padding: 22px;
   border: 1px solid color-mix(in srgb, var(--dtl-accent) 24%, var(--dtl-border));
-  border-radius: 18px;
+  border-radius: 24px;
   background:
-    radial-gradient(circle at 90% 10%, color-mix(in srgb, var(--dtl-accent) 20%, transparent), transparent 32%),
-    linear-gradient(135deg, var(--dtl-surface), var(--dtl-surface-muted));
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.08);
+    radial-gradient(circle at 88% 12%, color-mix(in srgb, var(--dtl-accent) 24%, transparent), transparent 28%),
+    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--dtl-accent-2) 18%, transparent), transparent 30%),
+    linear-gradient(135deg, color-mix(in srgb, var(--dtl-surface) 90%, var(--dtl-accent-3) 10%), var(--dtl-surface-muted));
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.1);
+}
+
+.daily-todolist-home-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(135deg, black, transparent 75%);
+  opacity: 0.7;
+}
+
+.daily-todolist-atlas-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.daily-todolist-atlas-pulse {
+  align-self: start;
+  min-width: 132px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--dtl-accent) 26%, var(--dtl-border));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--background-primary) 74%, transparent);
+  backdrop-filter: blur(12px);
+  text-align: right;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.daily-todolist-atlas-pulse-value {
+  color: var(--text-normal);
+  font-size: 1.7em;
+  font-weight: 850;
+  letter-spacing: -0.05em;
+}
+
+.daily-todolist-atlas-pulse-label {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
 }
 
 .daily-todolist-overview-grid {
@@ -365,10 +418,11 @@
 }
 
 .daily-todolist-overview-card {
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--dtl-border);
-  border-radius: 14px;
-  background: var(--dtl-surface);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--dtl-surface) 92%, white 8%), var(--dtl-surface));
   box-shadow: var(--dtl-shadow);
 }
 
@@ -400,9 +454,217 @@
 .daily-todolist-home-actions button {
   min-height: 34px;
   border: 1px solid var(--dtl-border);
-  border-radius: 10px;
-  background: var(--dtl-surface-muted);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--dtl-surface-muted) 88%, white 12%), var(--dtl-surface-muted));
   color: var(--text-normal);
+}
+
+.daily-todolist-atlas-grid,
+.daily-todolist-insight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.daily-todolist-insight-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.daily-todolist-insight-card {
+  position: relative;
+  overflow: hidden;
+  padding: 14px;
+  border: 1px solid var(--dtl-border);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--dtl-accent-3) 10%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--dtl-surface) 94%, white 6%), var(--dtl-surface));
+  box-shadow: var(--dtl-shadow);
+}
+
+.daily-todolist-insight-card::after {
+  content: '';
+  position: absolute;
+  inset: auto -30% -55% auto;
+  width: 180px;
+  height: 180px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dtl-accent) 8%, transparent);
+  filter: blur(14px);
+  pointer-events: none;
+}
+
+.daily-todolist-insight-title,
+.daily-todolist-note-title {
+  color: var(--text-normal);
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.06em;
+  font-weight: 760;
+  letter-spacing: -0.03em;
+}
+
+.daily-todolist-insight-subtitle,
+.daily-todolist-note-folder,
+.daily-todolist-note-meta,
+.daily-todolist-ranked-hint {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.daily-todolist-ranked-list,
+.daily-todolist-note-list {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.daily-todolist-ranked-row,
+.daily-todolist-note-row {
+  display: grid;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--dtl-border) 76%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--background-primary) 80%, transparent);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.daily-todolist-ranked-row {
+  grid-template-columns: 28px minmax(0, 1fr) 88px;
+}
+
+.daily-todolist-note-row {
+  cursor: pointer;
+}
+
+.daily-todolist-ranked-row.is-clickable,
+.daily-todolist-note-row:hover {
+  cursor: pointer;
+}
+
+.daily-todolist-ranked-row.is-clickable:hover,
+.daily-todolist-note-row:hover {
+  border-color: color-mix(in srgb, var(--dtl-accent) 28%, var(--dtl-border));
+  background: color-mix(in srgb, var(--background-primary) 88%, var(--dtl-accent) 12%);
+  transform: translateY(-1px);
+}
+
+.daily-todolist-ranked-index {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--daily-todolist-rank-accent) 16%, transparent);
+  color: var(--daily-todolist-rank-accent);
+  font-size: var(--font-ui-smaller);
+  font-weight: 850;
+}
+
+.daily-todolist-ranked-copy,
+.daily-todolist-ranked-metric {
+  min-width: 0;
+}
+
+.daily-todolist-ranked-label {
+  overflow: hidden;
+  color: var(--text-normal);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.daily-todolist-ranked-value {
+  color: var(--text-normal);
+  font-size: 1.15em;
+  font-weight: 800;
+  text-align: right;
+}
+
+.daily-todolist-ranked-bar {
+  height: 6px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dtl-border) 65%, transparent);
+}
+
+.daily-todolist-ranked-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--daily-todolist-rank-accent), color-mix(in srgb, var(--daily-todolist-rank-accent) 40%, white));
+}
+
+.daily-todolist-activity-card {
+  min-height: 240px;
+}
+
+.daily-todolist-activity-chart {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  align-items: end;
+  min-height: 172px;
+  margin-top: 16px;
+}
+
+.daily-todolist-activity-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: end;
+  gap: 6px;
+  min-height: 100%;
+}
+
+.daily-todolist-activity-value {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: 700;
+}
+
+.daily-todolist-activity-bar {
+  width: 100%;
+  min-height: 14px;
+  border: 1px solid color-mix(in srgb, var(--dtl-accent) 35%, transparent);
+  border-radius: 16px 16px 10px 10px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, white 18%, transparent), transparent 28%),
+    linear-gradient(180deg, var(--dtl-accent), color-mix(in srgb, var(--dtl-accent-2) 52%, var(--dtl-accent)));
+  box-shadow:
+    0 10px 18px color-mix(in srgb, var(--dtl-accent) 18%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+}
+
+.daily-todolist-activity-label {
+  color: var(--text-muted);
+  font-size: 0.72em;
+  font-weight: 700;
+}
+
+.daily-todolist-note-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.daily-todolist-note-meta {
+  flex-shrink: 0;
+}
+
+.daily-todolist-note-preview {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+  opacity: 0.9;
 }
 
 .daily-todolist-memo-input {
@@ -742,11 +1004,39 @@
   font-size: var(--font-ui-small);
 }
 
+@media (max-width: 720px) {
+  .daily-todolist-home-hero,
+  .daily-todolist-gantt-hero,
+  .daily-todolist-tabs-wide,
+  .daily-todolist-overview-grid,
+  .daily-todolist-atlas-grid,
+  .daily-todolist-insight-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-todolist-note-header,
+  .daily-todolist-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .daily-todolist-ranked-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .daily-todolist-ranked-metric {
+    grid-column: 1 / -1;
+    margin-left: 38px;
+  }
+}
+
 @media (max-width: 360px) {
   .daily-todolist-date-grid,
   .daily-todolist-tabs-wide,
   .daily-todolist-overview-grid,
-  .daily-todolist-home-actions {
+  .daily-todolist-home-actions,
+  .daily-todolist-atlas-grid,
+  .daily-todolist-insight-grid {
     grid-template-columns: 1fr;
   }
 }
