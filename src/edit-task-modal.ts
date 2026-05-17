@@ -1,4 +1,5 @@
-import { App, Modal, Setting } from 'obsidian';
+import { App, Modal, Notice, Setting } from 'obsidian';
+import { validateTaskScheduleInput } from './task-format';
 import { toDateTimeInputValue } from './ui';
 import type { PriorityOption, TodoTask } from './types';
 
@@ -92,6 +93,13 @@ export class EditTaskModal extends Modal {
 
   private submit(): void {
     if (!this.value.text.trim()) return;
+
+    const error = validateTaskScheduleInput(this.value);
+    if (error) {
+      new Notice(error);
+      return;
+    }
+
     this.close();
     this.onSubmit(this.value);
   }

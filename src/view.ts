@@ -10,7 +10,7 @@ import {
 } from './markdown-tasks';
 import { buildCalendarGrid, getMonthSummaries } from './calendar';
 import { createMermaidGantt, enrichTask, readTasksForDateRange, scheduledTasks } from './schedule';
-import { formatTaskInput } from './task-format';
+import { formatTaskInput, validateTaskScheduleInput } from './task-format';
 import { EditTaskModal } from './edit-task-modal';
 import { getPriorityOption, renderPriorityBadge } from './ui';
 import type { CalendarDaySummary, DailyTask, TodoTask } from './types';
@@ -463,13 +463,20 @@ export class DailyTodoListView extends ItemView {
     const text = this.inputEl?.value.trim() ?? '';
     if (!text) return;
 
-    const taskText = formatTaskInput({
+    const input = {
       text,
       startDate: this.startDateEl?.value.trim(),
       endDate: this.endDateEl?.value.trim(),
       dueDate: this.dueDateEl?.value.trim(),
       priority: this.priorityEl?.value,
-    });
+    };
+    const error = validateTaskScheduleInput(input);
+    if (error) {
+      new Notice(error);
+      return;
+    }
+
+    const taskText = formatTaskInput(input);
     const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
     if (!file) return;
 

@@ -3,7 +3,7 @@ import type DailyTodoListPlugin from './main';
 import { getOrCreateTodayDailyNote, openTodayDailyNote } from './daily-note';
 import { addTaskToContent } from './markdown-tasks';
 import { createMermaidGantt, readTasksForDateRange, scheduledTasks } from './schedule';
-import { formatTaskInput } from './task-format';
+import { formatTaskInput, validateTaskScheduleInput } from './task-format';
 import type { PriorityOption } from './types';
 
 class AddTodoModal extends Modal {
@@ -92,14 +92,21 @@ class AddTodoModal extends Modal {
   private submit(): void {
     const value = this.text.trim();
     if (!value) return;
-    this.close();
-    this.onSubmit(formatTaskInput({
+    const input = {
       text: value,
       startDate: this.startDate,
       endDate: this.endDate,
       dueDate: this.dueDate,
       priority: this.priority,
-    }));
+    };
+    const error = validateTaskScheduleInput(input);
+    if (error) {
+      new Notice(error);
+      return;
+    }
+
+    this.close();
+    this.onSubmit(formatTaskInput(input));
   }
 }
 
