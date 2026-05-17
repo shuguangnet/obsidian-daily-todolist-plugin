@@ -6,6 +6,18 @@ import { createMermaidGantt, readTasksForDateRange, scheduledTasks } from './sch
 import { formatTaskInput, validateTaskScheduleInput } from './task-format';
 import type { PriorityOption } from './types';
 
+const ganttBlockMarker = '<!-- daily-todolist-gantt -->';
+const ganttBlockRegex = /\n*<!-- daily-todolist-gantt -->\n```mermaid\n[\s\S]*?```/;
+
+function upsertGanttBlock(content: string, gantt: string): string {
+  const block = `${ganttBlockMarker}\n${gantt}`;
+  if (ganttBlockRegex.test(content)) {
+    return content.replace(ganttBlockRegex, `\n\n${block}`);
+  }
+
+  return `${content.replace(/[\r\n]+$/, '')}\n\n${block}\n`;
+}
+
 class AddTodoModal extends Modal {
   private text = '';
   private startDate = '';
@@ -171,8 +183,9 @@ export function registerDailyTodoListCommands(plugin: DailyTodoListPlugin): void
       if (!file) return;
 
       const content = await plugin.app.vault.read(file);
-      await plugin.app.vault.modify(file, `${content.replace(/[\r\n]+$/, '')}\n\n${createMermaidGantt(tasks)}\n`);
-      new Notice('已插入甘特图到今日笔记');
+      const nextContent = upsertGanttBlock(content, createMermaidGantt(tasks));
+      await plugin.app.vault.modify(file, nextContent);
+      new Notice(content === nextContent ? '甘特图已是最新' : '已更新甘特图到今日笔记');
     },
   });
 
