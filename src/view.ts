@@ -1,4 +1,4 @@
-import { App, ItemView, MarkdownRenderer, Modal, Notice, Setting, TFile, WorkspaceLeaf } from 'obsidian';
+import { ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf } from 'obsidian';
 import type DailyTodoListPlugin from './main';
 import { getDailyNotePathForDate, getOrCreateTodayDailyNote, openTodayDailyNote } from './daily-note';
 import {
@@ -11,109 +11,12 @@ import {
 import { buildCalendarGrid, getMonthSummaries } from './calendar';
 import { createMermaidGantt, enrichTask, readTasksForDateRange, scheduledTasks } from './schedule';
 import { formatTaskInput } from './task-format';
-import type { CalendarDaySummary, DailyTask, PriorityOption, TodoTask } from './types';
+import { EditTaskModal } from './edit-task-modal';
+import { getPriorityOption, renderPriorityBadge } from './ui';
+import type { CalendarDaySummary, DailyTask, TodoTask } from './types';
 
 export const DAILY_TODOLIST_VIEW_TYPE = 'daily-todolist-view';
 export type DailyTodoListTab = 'today' | 'calendar' | 'gantt';
-
-interface TaskEditValue {
-  text: string;
-  startDate?: string;
-  endDate?: string;
-  dueDate?: string;
-  priority?: string;
-}
-
-class EditTaskModal extends Modal {
-  private value: TaskEditValue;
-  private onSubmit: (value: TaskEditValue) => void;
-  private priorityOptions: PriorityOption[];
-
-  constructor(
-    app: App,
-    task: TodoTask,
-    priorityOptions: PriorityOption[],
-    onSubmit: (value: TaskEditValue) => void,
-  ) {
-    super(app);
-    this.priorityOptions = priorityOptions;
-    this.onSubmit = onSubmit;
-    this.value = {
-      text: task.displayText || task.text,
-      startDate: toDateTimeInputValue(task.startDate),
-      endDate: toDateTimeInputValue(task.endDate),
-      dueDate: toDateTimeInputValue(task.dueDate),
-      priority: task.priority ?? '',
-    };
-  }
-
-  onOpen(): void {
-    this.setTitle('编辑待办');
-    this.contentEl.addClass('daily-todolist-modal');
-
-    new Setting(this.contentEl)
-      .setName('任务内容')
-      .addText((text) => {
-        text.setValue(this.value.text)
-          .onChange((value) => {
-            this.value.text = value;
-          });
-        text.inputEl.focus();
-      });
-
-    this.createDateTimePicker('开始时间', this.value.startDate, (value) => {
-      this.value.startDate = value;
-    });
-    this.createDateTimePicker('结束时间', this.value.endDate, (value) => {
-      this.value.endDate = value;
-    });
-    this.createDateTimePicker('到期时间', this.value.dueDate, (value) => {
-      this.value.dueDate = value;
-    });
-    this.createPriorityPicker();
-
-    new Setting(this.contentEl)
-      .addButton((button) => button
-        .setButtonText('保存修改')
-        .setCta()
-        .onClick(() => this.submit()));
-  }
-
-  private createDateTimePicker(name: string, value: string | undefined, onChange: (value: string) => void): void {
-    const setting = new Setting(this.contentEl).setName(name);
-    const input = setting.controlEl.createEl('input', {
-      type: 'datetime-local',
-      cls: 'daily-todolist-date-input',
-    });
-    input.value = value ?? '';
-    input.addEventListener('change', () => onChange(input.value.trim()));
-  }
-
-  private createPriorityPicker(): void {
-    new Setting(this.contentEl)
-      .setName('优先级')
-      .addDropdown((dropdown) => {
-        dropdown.addOption('', '无优先级');
-        for (const option of this.priorityOptions) {
-          dropdown.addOption(option.id, option.label);
-        }
-        dropdown.setValue(this.value.priority ?? '');
-        dropdown.onChange((value) => {
-          this.value.priority = value;
-        });
-      });
-  }
-
-  private submit(): void {
-    if (!this.value.text.trim()) return;
-    this.close();
-    this.onSubmit(this.value);
-  }
-}
-
-function toDateTimeInputValue(value?: string): string | undefined {
-  return value?.replace(' ', 'T');
-}
 
 function parseGanttMoment(value: string, endOfDay = false): moment.Moment {
   const format = value.includes(':') ? 'YYYY-MM-DD HH:mm' : 'YYYY-MM-DD';
@@ -461,7 +364,7 @@ export class DailyTodoListView extends ItemView {
     const end = parseGanttMoment(task.endDate ?? task.dueDate ?? task.startDate ?? task.date, true);
     const left = Math.max(0, Math.min(96, (start.diff(rangeStart, 'minutes') / totalMinutes) * 100));
     const width = Math.max(4, Math.min(100 - left, (end.diff(start, 'minutes') / totalMinutes) * 100));
-    const option = this.getPriorityOption(task.priority);
+    const option = getPriorityOption(this.plugin.settings.priorityOptions, task.priority);
     const isOverdue = !task.completed && end.isBefore(window.moment());
     const row = parent.createDiv({ cls: isOverdue ? 'daily-todolist-gantt-row is-overdue' : 'daily-todolist-gantt-row' });
     const label = row.createDiv({ cls: 'daily-todolist-gantt-row-label' });
@@ -474,7 +377,7 @@ export class DailyTodoListView extends ItemView {
     bar.style.width = `${width}%`;
     bar.style.setProperty('--daily-todolist-priority-color', option?.color ?? 'var(--dtl-accent)');
     bar.createSpan({ cls: 'daily-todolist-gantt-bar-title', text: task.displayText || task.text });
-    this.renderPriorityBadge(bar, task.priority);
+    renderPriorityBadge(bar, this.plugin.settings.priorityOptions, task.priority);
   }
 
   private renderTaskList(root: HTMLElement, file: TFile, tasks: TodoTask[], emptyText: string): void {
@@ -521,7 +424,7 @@ export class DailyTodoListView extends ItemView {
     });
 
     const text = item.createDiv({ cls: 'daily-todolist-item-text', text: task.displayText || task.text });
-    this.renderPriorityBadge(text, task.priority);
+    renderPriorityBadge(text, this.plugin.settings.priorityOptions, task.priority);
     if (task.startDate || task.endDate || task.dueDate) {
       text.createDiv({
         cls: 'daily-todolist-task-meta',
@@ -555,20 +458,6 @@ export class DailyTodoListView extends ItemView {
     }).open();
   }
 
-  private renderPriorityBadge(parent: HTMLElement, priority?: string): void {
-    const option = this.getPriorityOption(priority);
-    if (!option) return;
-
-    const badge = parent.createSpan({ cls: 'daily-todolist-priority-badge', text: option.label });
-    badge.style.setProperty('--daily-todolist-priority-color', option.color);
-  }
-
-  private getPriorityOption(priority?: string): PriorityOption | undefined {
-    if (!priority) return undefined;
-    return this.plugin.settings.priorityOptions.find((option) => (
-      option.id === priority || option.label === priority
-    ));
-  }
 
   private async addTodoFromInput(): Promise<void> {
     const text = this.inputEl?.value.trim() ?? '';
