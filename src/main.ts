@@ -1,4 +1,4 @@
-import { Notice, Plugin } from 'obsidian';
+import { Plugin } from 'obsidian';
 import { registerDailyTodoListCommands } from './commands';
 import { DAILY_TODOLIST_VIEW_TYPE, DailyTodoListView } from './view';
 import { DailyTodoListSettingTab, DEFAULT_SETTINGS } from './settings';
@@ -11,10 +11,6 @@ export default class DailyTodoListPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
-
-    if (!this.isDesktopApp()) {
-      new Notice('AI Command Panel 仅支持桌面端 Obsidian。');
-    }
 
     this.registerView(
       DAILY_TODOLIST_VIEW_TYPE,
@@ -90,10 +86,6 @@ export default class DailyTodoListPlugin extends Plugin {
 
   invalidateVaultAnalytics(): void {
     this.vaultAnalyticsPromise = null;
-  }
-
-  isDesktopApp(): boolean {
-    return typeof process !== 'undefined' && process.platform !== undefined;
   }
 
   async loadSettings(): Promise<void> {

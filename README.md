@@ -11,9 +11,8 @@ Vault Atlas HQ 是一个面向 Obsidian 知识库主页的插件。它一边保�
 - **甘特图排期**：读取任务中的排期元数据，提供高级时间轴视图，并可渲染 / 插入 Mermaid gantt。
 - **统计面板**：按当前月份统计 TodoList 与 Memo，同时补充 Vault 级别的标签、frontmatter、未解析链接、结构层级和新建笔记数据。
 - **优先级标记**：添加任务时可选择优先级，并按设置页配置的颜色展示在任务卡片和甘特图任务条中。
-- **命令面板**：支持打开今日视图、日历视图、甘特图视图、AI 面板、宽工作区视图、添加今日待办、打开今日笔记、插入甘特图到今日笔记。
-- **AI Command Panel**：桌面端可直接调用本地 AI CLI（如 Claude Code、Codex、OpenCode），支持附加当前笔记、今日日记、今日任务上下文，并将输出保存到 Memo、Journal 或新笔记。
-- **设置页**：支持 Daily Notes 设置复用、标题名、插入位置、显示已完成、自动创建 Daily Note、默认视图、甘特图读取范围、AI provider 配置、AI 输出目录和优先级颜色。
+- **命令面板**：支持打开今日视图、日历视图、甘特图视图、宽工作区视图、添加今日待办、打开今日笔记、插入甘特图到今日笔记。
+- **设置页**：支持 Daily Notes 设置复用、标题名、插入位置、显示已完成、自动创建 Daily Note、默认视图、甘特图读取范围和优先级颜色。
 
 ## 任务语法
 
@@ -70,13 +69,17 @@ Vault Atlas HQ 是一个面向 Obsidian 知识库主页的插件。它一边保�
 
 备忘录视图用于快速记录当天灵感、会议结论或临时备注。内容会写入今日 Daily Note 的 `Memo` 标题区块，支持 `Cmd/Ctrl + Enter` 快速添加。
 
+### 日记视图
+
+日记视图用于记录今日日志、复盘和思考。内容会写入今日 Daily Note 的 `Journal` 标题区块，保留自由文本书写空间。
+
 ### 日历视图
 
 日历视图按月汇总 Daily Note 中的待办数量、完成数量和带排期任务数量。点击某一天可以查看该日期的任务列表。
 
 ### 统计视图
 
-统计视图按当前月份聚合 TodoList 和 Memo 数据，同时叠加整个 Vault 的标签数、frontmatter 覆盖率、未解析链接、平均篇幅、目录层级分布、链接中枢和新建笔记清单。
+统计视图按当前月份聚合 TodoList、Memo 和 Journal 数据，同时叠加整个 Vault 的标签数、frontmatter 覆盖率、未解析链接、平均篇幅、目录层级分布、链接中枢和新建笔记清单。
 
 ### 甘特图视图
 
@@ -89,23 +92,12 @@ Vault Atlas HQ 是一个面向 Obsidian 知识库主页的插件。它一边保�
 - 已完成任务弱化展示，逾期任务突出提示。
 - 可一键渲染 Mermaid 甘特图预览。
 
-### AI Command Panel
-
-AI Command Panel 仅支持桌面端 Obsidian。你可以在设置页为 Claude Code、Codex、OpenCode 配置本地可执行路径、参数模板和工作目录。运行时可显式附加：
-
-- 当前笔记
-- 今日日记
-- 今日任务
-
-执行结果默认只保留在面板中，只有当你点击“存为备忘录”“追加到日记”或“新建笔记”时，才会写回 Vault。
-
 ### 宽工作区模式
 
 宽工作区模式用于把 Vault Atlas HQ 打开到主工作区，而不是只占用右侧窄栏。它更适合这些场景：
 
 - 查看首页统计和多卡片总览
 - 阅读更长的甘特图时间轴
-- 在 AI Command Panel 中同时编辑 prompt 和查看长输出
 - 以更大的空间完成 Journal / Memo / Stats 工作流
 
 默认命令仍然保持右侧栏打开行为；如果你想进入更宽的工作区，请使用 `Open Vault Atlas HQ in wide workspace` 命令，或在首页点击“宽屏打开”。
@@ -132,11 +124,11 @@ npm run build
 | 命令 | 说明 |
 |------|------|
 | `Open Daily TodoList view` | 打开插件侧边栏 |
-| `Add todo to today` | 通过弹窗添加今日任务 |
-| `Open Daily TodoList calendar` | 打开日历页签 |
-| `Open Daily TodoList gantt` | 打开甘特图页签 |
-| `Open Vault Atlas AI panel` | 打开 AI Command Panel 页签 |
 | `Open Vault Atlas HQ in wide workspace` | 在主工作区打开更宽的 Vault Atlas HQ 视图 |
+| `Add todo to today` | 通过弹窗添加今日任务 |
+| `Open Vault Atlas calendar` | 打开日历页签 |
+| `Open Vault Atlas journal` | 打开日记页签 |
+| `Open Vault Atlas gantt` | 打开甘特图页签 |
 | `Insert Daily TodoList gantt to today note` | 将当前范围的 Mermaid 甘特图插入今日笔记 |
 | `Open today daily note` | 打开今日 Daily Note |
 
@@ -149,6 +141,7 @@ obsidian-daily-todolist-plugin/
 ├── src/calendar.ts
 ├── src/commands.ts
 ├── src/daily-note.ts
+├── src/journal.ts
 ├── src/main.ts
 ├── src/markdown-tasks.ts
 ├── src/memos.ts

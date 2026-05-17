@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import type DailyTodoListPlugin from './main';
-import type { AIProviderConfig, DailyTodoListSettings, PriorityOption } from './types';
+import type { DailyTodoListSettings, PriorityOption } from './types';
 
 export const DEFAULT_SETTINGS: DailyTodoListSettings = {
   useDailyNotesPluginSettings: true,
@@ -16,12 +16,6 @@ export const DEFAULT_SETTINGS: DailyTodoListSettings = {
   calendarDefaultView: 'today',
   ganttLookbackDays: 14,
   ganttLookaheadDays: 30,
-  aiOutputFolder: 'AI Outputs',
-  aiProviders: [
-    { id: 'claude-code', label: 'Claude Code', executablePath: 'claude', argsTemplate: '--print "{{prompt}}"', workingDirectory: '', enabled: true },
-    { id: 'codex', label: 'Codex', executablePath: 'codex', argsTemplate: '"{{prompt}}"', workingDirectory: '', enabled: false },
-    { id: 'opencode', label: 'OpenCode', executablePath: 'opencode', argsTemplate: '"{{prompt}}"', workingDirectory: '', enabled: false },
-  ],
   priorityOptions: [
     { id: 'low', label: '低优先级', color: '#16a34a' },
     { id: 'medium', label: '中优先级', color: '#d97706' },
@@ -170,22 +164,6 @@ export class DailyTodoListSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName('AI 输出目录')
-      .setDesc('使用 AI Command Panel 新建笔记时的默认目录。')
-      .addText((text) => text
-        .setPlaceholder('AI Outputs')
-        .setValue(this.plugin.settings.aiOutputFolder)
-        .onChange(async (value) => {
-          this.plugin.settings.aiOutputFolder = value.trim() || DEFAULT_SETTINGS.aiOutputFolder;
-          await this.plugin.saveSettings();
-        }));
-
-    containerEl.createEl('h3', { text: 'AI Providers' });
-    this.plugin.settings.aiProviders.forEach((provider) => {
-      this.renderAIProviderSetting(containerEl, provider);
-    });
-
-    new Setting(containerEl)
       .setName('甘特图回看天数')
       .setDesc('从今天向前读取多少天的 Daily Note。')
       .addText((text) => text
@@ -238,39 +216,5 @@ export class DailyTodoListSettingTab extends PluginSettingTab {
       await this.plugin.saveSettings();
       this.plugin.refreshViews();
     });
-  }
-
-  private renderAIProviderSetting(containerEl: HTMLElement, provider: AIProviderConfig): void {
-    new Setting(containerEl)
-      .setName(provider.label)
-      .setDesc('配置本地 AI CLI 的可执行路径、参数模板和工作目录。')
-      .addToggle((toggle) => toggle
-        .setValue(provider.enabled)
-        .onChange(async (value) => {
-          provider.enabled = value;
-          await this.plugin.saveSettings();
-          this.plugin.refreshViews();
-        }))
-      .addText((text) => text
-        .setPlaceholder('可执行路径')
-        .setValue(provider.executablePath)
-        .onChange(async (value) => {
-          provider.executablePath = value.trim();
-          await this.plugin.saveSettings();
-        }))
-      .addText((text) => text
-        .setPlaceholder('参数模板，例如 --print "{{prompt}}"')
-        .setValue(provider.argsTemplate)
-        .onChange(async (value) => {
-          provider.argsTemplate = value.trim();
-          await this.plugin.saveSettings();
-        }))
-      .addText((text) => text
-        .setPlaceholder('工作目录，留空使用仓库根目录')
-        .setValue(provider.workingDirectory)
-        .onChange(async (value) => {
-          provider.workingDirectory = value.trim();
-          await this.plugin.saveSettings();
-        }));
   }
 }

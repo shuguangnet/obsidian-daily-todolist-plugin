@@ -184,14 +184,6 @@ export function registerDailyTodoListCommands(plugin: DailyTodoListPlugin): void
   });
 
   plugin.addCommand({
-    id: 'open-ai-command-panel',
-    name: 'Open Vault Atlas AI panel',
-    callback: async () => {
-      await plugin.activateView('ai');
-    },
-  });
-
-  plugin.addCommand({
     id: 'insert-gantt-to-today',
     name: 'Insert Daily TodoList gantt to today note',
     callback: async () => {
