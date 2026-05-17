@@ -520,6 +520,11 @@
   align-items: center;
   padding: 10px 0;
   border-bottom: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+}
+
+.daily-todolist-gantt-row:hover .daily-todolist-gantt-row-title {
+  color: var(--text-accent);
 }
 
 .daily-todolist-gantt-row.is-overdue .daily-todolist-gantt-row-title {

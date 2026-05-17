@@ -367,6 +367,9 @@ export class DailyTodoListView extends ItemView {
     const option = getPriorityOption(this.plugin.settings.priorityOptions, task.priority);
     const isOverdue = !task.completed && end.isBefore(window.moment());
     const row = parent.createDiv({ cls: isOverdue ? 'daily-todolist-gantt-row is-overdue' : 'daily-todolist-gantt-row' });
+    row.addEventListener('click', async () => {
+      await this.openTaskSource(task);
+    });
     const label = row.createDiv({ cls: 'daily-todolist-gantt-row-label' });
     label.createDiv({ cls: 'daily-todolist-gantt-row-title', text: task.displayText || task.text });
     label.createDiv({ cls: 'daily-todolist-gantt-row-date', text: `${start.format('MM-DD HH:mm')} → ${end.format('MM-DD HH:mm')}` });
@@ -439,6 +442,16 @@ export class DailyTodoListView extends ItemView {
       .addEventListener('click', async () => {
         await this.deleteTask(file, task);
       });
+  }
+
+  private async openTaskSource(task: DailyTask): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(task.filePath);
+    if (!(file instanceof TFile)) {
+      new Notice('来源 Daily Note 不存在');
+      return;
+    }
+
+    await this.app.workspace.getLeaf(false).openFile(file);
   }
 
   private openEditTaskModal(file: TFile, task: TodoTask): void {
