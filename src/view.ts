@@ -10,13 +10,14 @@ import {
 } from './markdown-tasks';
 import { buildCalendarGrid, getMonthSummaries } from './calendar';
 import { createMermaidGantt, enrichTask, readTasksForDateRange, scheduledTasks } from './schedule';
+import { addMemoToContent, deleteMemoFromContent, parseMemosFromContent, readMemosForDateRange } from './memos';
 import { formatTaskInput, validateTaskScheduleInput } from './task-format';
 import { EditTaskModal } from './edit-task-modal';
 import { getPriorityOption, renderPriorityBadge } from './ui';
-import type { CalendarDaySummary, DailyTask, TodoTask } from './types';
+import type { CalendarDaySummary, DailyMemo, DailyTask, TodoTask } from './types';
 
 export const DAILY_TODOLIST_VIEW_TYPE = 'daily-todolist-view';
-export type DailyTodoListTab = 'today' | 'calendar' | 'gantt';
+export type DailyTodoListTab = 'home' | 'today' | 'memo' | 'calendar' | 'gantt' | 'stats';
 type GanttRangePreset = 'week' | 'month' | 'quarter' | null;
 
 function parseGanttMoment(value: string, endOfDay = false): moment.Moment {
@@ -32,6 +33,7 @@ export class DailyTodoListView extends ItemView {
   private endDateEl: HTMLInputElement | null = null;
   private dueDateEl: HTMLInputElement | null = null;
   private priorityEl: HTMLSelectElement | null = null;
+  private memoInputEl: HTMLTextAreaElement | null = null;
   private activeTab: DailyTodoListTab;
   private selectedDate = window.moment().format('YYYY-MM-DD');
   private currentMonth = window.moment().format('YYYY-MM');
@@ -84,10 +86,16 @@ export class DailyTodoListView extends ItemView {
   private async renderActiveTab(root: HTMLElement, refreshId: number): Promise<void> {
     root.createDiv({ cls: 'daily-todolist-loading', text: '正在整理你的待办...' });
 
-    if (this.activeTab === 'calendar') {
+    if (this.activeTab === 'home') {
+      await this.renderHome(root, refreshId);
+    } else if (this.activeTab === 'calendar') {
       await this.renderCalendar(root, refreshId);
     } else if (this.activeTab === 'gantt') {
       await this.renderGantt(root, refreshId);
+    } else if (this.activeTab === 'memo') {
+      await this.renderMemo(root, refreshId);
+    } else if (this.activeTab === 'stats') {
+      await this.renderStats(root, refreshId);
     } else {
       await this.renderToday(root, refreshId);
     }
@@ -102,10 +110,13 @@ export class DailyTodoListView extends ItemView {
     header.createDiv({ cls: 'daily-todolist-title', text: 'Daily TodoList' });
     header.createDiv({ text: window.moment().format('YYYY-MM-DD') });
 
-    const tabs = root.createDiv({ cls: 'daily-todolist-tabs' });
+    const tabs = root.createDiv({ cls: 'daily-todolist-tabs daily-todolist-tabs-wide' });
+    this.renderTabButton(tabs, 'home', '首页');
     this.renderTabButton(tabs, 'today', '今日');
+    this.renderTabButton(tabs, 'memo', '备忘录');
     this.renderTabButton(tabs, 'calendar', '日历');
     this.renderTabButton(tabs, 'gantt', '甘特图');
+    this.renderTabButton(tabs, 'stats', '统计');
   }
 
   private renderTabButton(parent: HTMLElement, tab: DailyTodoListTab, text: string): void {
@@ -175,6 +186,141 @@ export class DailyTodoListView extends ItemView {
       select.createEl('option', { text: option.label, value: option.id });
     }
     return select;
+  }
+
+  private async renderHome(root: HTMLElement, refreshId: number): Promise<void> {
+    root.empty();
+    const today = window.moment().format('YYYY-MM-DD');
+    const { start, end } = this.getMonthRange();
+    const [tasks, memos] = await Promise.all([
+      this.getRangeTasks(start, end),
+      readMemosForDateRange(this.app, this.plugin.settings, start, end),
+    ]);
+    if (!this.canRender(refreshId)) return;
+
+    const todayTasks = tasks.filter((task) => task.date === today);
+    const todayMemos = memos.filter((memo) => memo.date === today);
+    const completed = tasks.filter((task) => task.completed).length;
+    const planned = scheduledTasks(tasks);
+
+    const hero = root.createDiv({ cls: 'daily-todolist-home-hero' });
+    hero.createDiv({ cls: 'daily-todolist-gantt-kicker', text: 'Daily Overview' });
+    hero.createDiv({ cls: 'daily-todolist-gantt-hero-title', text: '今日文档概览' });
+    hero.createDiv({
+      cls: 'daily-todolist-gantt-hero-subtitle',
+      text: `${today} · 本月 ${tasks.length} 个待办 / ${memos.length} 条备忘录`,
+    });
+
+    const cards = root.createDiv({ cls: 'daily-todolist-overview-grid' });
+    this.renderOverviewCard(cards, '今日待办', `${todayTasks.filter((task) => task.completed).length}/${todayTasks.length}`, '完成进度');
+    this.renderOverviewCard(cards, '今日备忘录', String(todayMemos.length), this.plugin.settings.memoHeading);
+    this.renderOverviewCard(cards, '本月排期', String(planned.length), `${start} → ${end}`);
+    this.renderOverviewCard(cards, '本月完成率', tasks.length === 0 ? '0%' : `${Math.round((completed / tasks.length) * 100)}%`, `${completed}/${tasks.length}`);
+
+    const quick = root.createDiv({ cls: 'daily-todolist-home-actions' });
+    this.renderQuickTabButton(quick, 'today', '记录待办');
+    this.renderQuickTabButton(quick, 'memo', '写备忘录');
+    this.renderQuickTabButton(quick, 'stats', '查看统计');
+    quick.createEl('button', { text: '打开今日笔记' }).addEventListener('click', () => {
+      openTodayDailyNote(this.app, this.plugin.settings);
+    });
+
+    root.createEl('h3', { text: '今日待办' });
+    const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
+    if (!this.canRender(refreshId)) return;
+    if (file) this.renderTaskList(root, file, todayTasks, '今天还没有待办。');
+
+    root.createEl('h3', { text: '最近备忘录' });
+    this.renderMemoList(root, memos.slice(-5).reverse(), '本月还没有备忘录。');
+  }
+
+  private async renderMemo(root: HTMLElement, refreshId: number): Promise<void> {
+    root.empty();
+    const compose = root.createDiv({ cls: 'daily-todolist-compose daily-todolist-memo-compose' });
+    compose.createDiv({ cls: 'daily-todolist-compose-title', text: '备忘录速记' });
+    this.memoInputEl = compose.createEl('textarea', {
+      cls: 'daily-todolist-input daily-todolist-memo-input',
+      attr: { placeholder: '记录灵感、会议结论或今日备注...' },
+    });
+    this.memoInputEl.addEventListener('keydown', async (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') await this.addMemoFromInput();
+    });
+    compose.createEl('button', { cls: 'daily-todolist-add-button', text: '添加备忘录' })
+      .addEventListener('click', () => this.addMemoFromInput());
+
+    const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
+    if (!this.canRender(refreshId)) return;
+    if (!file) {
+      root.createDiv({ cls: 'daily-todolist-empty', text: '今日 Daily Note 不存在。' });
+      return;
+    }
+
+    const memos = await this.readMemos(file);
+    if (!this.canRender(refreshId)) return;
+    root.createDiv({ cls: 'daily-todolist-stats', text: `今日 ${memos.length} 条备忘录` });
+    this.renderMemoList(root, memos, '今天还没有备忘录。', file);
+  }
+
+  private async renderStats(root: HTMLElement, refreshId: number): Promise<void> {
+    root.empty();
+    const { start, end } = this.getMonthRange();
+    const [tasks, memos] = await Promise.all([
+      this.getRangeTasks(start, end),
+      readMemosForDateRange(this.app, this.plugin.settings, start, end),
+    ]);
+    if (!this.canRender(refreshId)) return;
+
+    const completed = tasks.filter((task) => task.completed).length;
+    const active = tasks.length - completed;
+    const planned = scheduledTasks(tasks);
+    const overdue = planned.filter((task) => {
+      const endDate = task.endDate ?? task.dueDate ?? task.startDate;
+      return !task.completed && endDate && parseGanttMoment(endDate, true).isBefore(window.moment());
+    }).length;
+    const memoDays = new Set(memos.map((memo) => memo.date)).size;
+
+    root.createDiv({ cls: 'daily-todolist-stats-title', text: `${window.moment(start).format('YYYY年MM月')} 统计` });
+    const cards = root.createDiv({ cls: 'daily-todolist-overview-grid' });
+    this.renderOverviewCard(cards, '待办总数', String(tasks.length), `${completed} 已完成 / ${active} 未完成`);
+    this.renderOverviewCard(cards, '完成率', tasks.length === 0 ? '0%' : `${Math.round((completed / tasks.length) * 100)}%`, 'TodoList');
+    this.renderOverviewCard(cards, '排期任务', String(planned.length), overdue > 0 ? `${overdue} 个已逾期` : '无逾期');
+    this.renderOverviewCard(cards, '备忘录', String(memos.length), `${memoDays} 天有记录`);
+
+    const bars = root.createDiv({ cls: 'daily-todolist-stats-bars' });
+    this.renderStatsBar(bars, '已完成', completed, tasks.length);
+    this.renderStatsBar(bars, '未完成', active, tasks.length);
+    this.renderStatsBar(bars, '有排期', planned.length, tasks.length);
+    this.renderStatsBar(bars, '备忘录活跃天', memoDays, window.moment(end).diff(window.moment(start), 'days') + 1);
+
+    root.createEl('h3', { text: '最近备忘录' });
+    this.renderMemoList(root, memos.slice(-8).reverse(), '本月还没有备忘录。');
+  }
+
+  private getMonthRange(): { start: string; end: string } {
+    const current = window.moment(this.currentMonth, 'YYYY-MM');
+    return {
+      start: current.clone().startOf('month').format('YYYY-MM-DD'),
+      end: current.clone().endOf('month').format('YYYY-MM-DD'),
+    };
+  }
+
+  private renderOverviewCard(parent: HTMLElement, label: string, value: string, detail: string): void {
+    const card = parent.createDiv({ cls: 'daily-todolist-overview-card' });
+    card.createDiv({ cls: 'daily-todolist-overview-value', text: value });
+    card.createDiv({ cls: 'daily-todolist-overview-label', text: label });
+    card.createDiv({ cls: 'daily-todolist-overview-detail', text: detail });
+  }
+
+  private renderQuickTabButton(parent: HTMLElement, tab: DailyTodoListTab, text: string): void {
+    parent.createEl('button', { text }).addEventListener('click', () => this.setTab(tab));
+  }
+
+  private renderStatsBar(parent: HTMLElement, label: string, value: number, total: number): void {
+    const row = parent.createDiv({ cls: 'daily-todolist-stats-bar-row' });
+    row.createDiv({ cls: 'daily-todolist-stats-bar-label', text: `${label} · ${value}` });
+    const track = row.createDiv({ cls: 'daily-todolist-stats-bar-track' });
+    const fill = track.createDiv({ cls: 'daily-todolist-stats-bar-fill' });
+    fill.style.width = `${total === 0 ? 0 : Math.round((value / total) * 100)}%`;
   }
 
   private async renderCalendar(root: HTMLElement, refreshId: number): Promise<void> {
@@ -462,6 +608,37 @@ export class DailyTodoListView extends ItemView {
       .map((task) => enrichTask(task, date, path));
   }
 
+  private async readMemos(
+    file: TFile,
+    date = window.moment().format('YYYY-MM-DD'),
+    path = file.path,
+  ): Promise<DailyMemo[]> {
+    const content = await this.app.vault.read(file);
+    return parseMemosFromContent(content, this.plugin.settings.memoHeading)
+      .map((memo) => ({ ...memo, date, filePath: path }));
+  }
+
+  private renderMemoList(root: HTMLElement, memos: DailyMemo[], emptyText: string, file?: TFile): void {
+    const list = root.createDiv({ cls: 'daily-todolist-list daily-todolist-memo-list' });
+    if (memos.length === 0) {
+      list.createDiv({ cls: 'daily-todolist-empty', text: emptyText });
+      return;
+    }
+
+    for (const memo of memos) {
+      const item = list.createDiv({ cls: 'daily-todolist-item daily-todolist-memo-item' });
+      const text = item.createDiv({ cls: 'daily-todolist-item-text', text: memo.text });
+      text.createDiv({ cls: 'daily-todolist-task-meta', text: memo.date });
+      const actions = item.createDiv({ cls: 'daily-todolist-task-actions' });
+      actions.createEl('button', { cls: 'daily-todolist-edit', text: '打开' })
+        .addEventListener('click', async () => this.openMemoSource(memo));
+      if (file) {
+        actions.createEl('button', { cls: 'daily-todolist-delete', text: '删除' })
+          .addEventListener('click', async () => this.deleteMemo(file, memo));
+      }
+    }
+  }
+
   private renderTask(list: HTMLElement, file: TFile, task: TodoTask): void {
     const item = list.createDiv({
       cls: task.completed
@@ -495,6 +672,16 @@ export class DailyTodoListView extends ItemView {
 
   private async openTaskSource(task: DailyTask): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(task.filePath);
+    if (!(file instanceof TFile)) {
+      new Notice('来源 Daily Note 不存在');
+      return;
+    }
+
+    await this.app.workspace.getLeaf(false).openFile(file);
+  }
+
+  private async openMemoSource(memo: DailyMemo): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(memo.filePath);
     if (!(file instanceof TFile)) {
       new Notice('来源 Daily Note 不存在');
       return;
@@ -578,6 +765,35 @@ export class DailyTodoListView extends ItemView {
     const nextContent = deleteTaskFromContent(content, task);
     if (nextContent === null) {
       new Notice('任务已变化，请刷新后重试');
+      await this.refresh();
+      return;
+    }
+
+    await this.app.vault.modify(file, nextContent);
+    this.clearCaches();
+    await this.refresh();
+  }
+
+  private async addMemoFromInput(): Promise<void> {
+    const text = this.memoInputEl?.value.trim() ?? '';
+    if (!text) return;
+
+    const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
+    if (!file) return;
+
+    const content = await this.app.vault.read(file);
+    const nextContent = addMemoToContent(content, this.plugin.settings.memoHeading, text);
+    await this.app.vault.modify(file, nextContent);
+    this.clearCaches();
+    if (this.memoInputEl) this.memoInputEl.value = '';
+    await this.refresh();
+  }
+
+  private async deleteMemo(file: TFile, memo: DailyMemo): Promise<void> {
+    const content = await this.app.vault.read(file);
+    const nextContent = deleteMemoFromContent(content, memo);
+    if (nextContent === null) {
+      new Notice('备忘录已变化，请刷新后重试');
       await this.refresh();
       return;
     }

@@ -3,11 +3,12 @@ export interface DailyTodoListSettings {
   dailyNoteFolder: string;
   dailyNoteFormat: string;
   todoHeading: string;
+  memoHeading: string;
   insertPosition: 'top' | 'bottom';
   showCompleted: boolean;
   openViewOnStartup: boolean;
   autoCreateDailyNote: boolean;
-  calendarDefaultView: 'today' | 'calendar' | 'gantt';
+  calendarDefaultView: 'home' | 'today' | 'memo' | 'calendar' | 'gantt' | 'stats';
   ganttLookbackDays: number;
   ganttLookaheadDays: number;
   priorityOptions: PriorityOption[];
@@ -33,6 +34,18 @@ export interface TodoTask {
 }
 
 export interface DailyTask extends TodoTask {
+  date: string;
+  filePath: string;
+}
+
+export interface MemoItem {
+  id: string;
+  line: number;
+  text: string;
+  raw: string;
+}
+
+export interface DailyMemo extends MemoItem {
   date: string;
   filePath: string;
 }

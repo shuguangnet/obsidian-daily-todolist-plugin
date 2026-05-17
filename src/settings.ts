@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS: DailyTodoListSettings = {
   dailyNoteFolder: 'Daily Notes',
   dailyNoteFormat: 'YYYY-MM-DD',
   todoHeading: 'TodoList',
+  memoHeading: 'Memo',
   insertPosition: 'bottom',
   showCompleted: true,
   openViewOnStartup: false,
@@ -80,6 +81,18 @@ export class DailyTodoListSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
+      .setName('备忘录标题')
+      .setDesc('每日笔记中用于保存备忘录的标题名称。')
+      .addText((text) => text
+        .setPlaceholder('Memo')
+        .setValue(this.plugin.settings.memoHeading)
+        .onChange(async (value) => {
+          this.plugin.settings.memoHeading = value.trim() || DEFAULT_SETTINGS.memoHeading;
+          await this.plugin.saveSettings();
+          this.plugin.refreshViews();
+        }));
+
+    new Setting(containerEl)
       .setName('新任务插入位置')
       .setDesc('选择新任务插入 TodoList 区块顶部或底部。')
       .addDropdown((dropdown) => dropdown
@@ -123,11 +136,14 @@ export class DailyTodoListSettingTab extends PluginSettingTab {
       .setName('默认视图')
       .setDesc('打开侧边栏时默认显示的页签。')
       .addDropdown((dropdown) => dropdown
+        .addOption('home', '首页')
         .addOption('today', '今日')
+        .addOption('memo', '备忘录')
         .addOption('calendar', '日历')
         .addOption('gantt', '甘特图')
+        .addOption('stats', '统计')
         .setValue(this.plugin.settings.calendarDefaultView)
-        .onChange(async (value: 'today' | 'calendar' | 'gantt') => {
+        .onChange(async (value: DailyTodoListSettings['calendarDefaultView']) => {
           this.plugin.settings.calendarDefaultView = value;
           await this.plugin.saveSettings();
           this.plugin.refreshViews();
