@@ -1,7 +1,7 @@
 {
   "id": "obsidian-daily-todolist",
   "name": "Vault Atlas HQ",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "0.16.0",
   "description": "Knowledge base home dashboard for Obsidian with vault analytics, classifications, and daily capture.",
   "author": "shuguang",
