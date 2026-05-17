@@ -1,3 +1,8 @@
+export type DailyTodoListTab = 'home' | 'today' | 'journal' | 'memo' | 'calendar' | 'gantt' | 'stats' | 'ai';
+export type AIProviderId = 'claude-code' | 'codex' | 'opencode';
+export type AIContextSource = 'current-note' | 'today-journal' | 'today-tasks';
+export type AIExecutionStatus = 'idle' | 'running' | 'success' | 'error' | 'stopped';
+
 export interface DailyTodoListSettings {
   useDailyNotesPluginSettings: boolean;
   dailyNoteFolder: string;
@@ -9,10 +14,76 @@ export interface DailyTodoListSettings {
   showCompleted: boolean;
   openViewOnStartup: boolean;
   autoCreateDailyNote: boolean;
-  calendarDefaultView: 'home' | 'today' | 'journal' | 'memo' | 'calendar' | 'gantt' | 'stats';
+  calendarDefaultView: DailyTodoListTab;
   ganttLookbackDays: number;
   ganttLookaheadDays: number;
+  aiOutputFolder: string;
+  aiProviders: AIProviderConfig[];
   priorityOptions: PriorityOption[];
+}
+
+export interface AIProviderConfig {
+  id: AIProviderId;
+  label: string;
+  executablePath: string;
+  argsTemplate: string;
+  workingDirectory: string;
+  enabled: boolean;
+}
+
+export interface AIContextSelection {
+  currentNote: boolean;
+  todayJournal: boolean;
+  todayTasks: boolean;
+}
+
+export interface AIExecutionState {
+  status: AIExecutionStatus;
+  stdout: string;
+  stderr: string;
+  commandSummary: string;
+}
+
+export interface AIContextAttachment {
+  source: AIContextSource;
+  label: string;
+  content: string;
+}
+
+export interface AIRunRequest {
+  provider: AIProviderConfig;
+  prompt: string;
+  contextText: string;
+  workingDirectory: string;
+}
+
+export interface AIExecutionCallbacks {
+  onStdout?: (chunk: string) => void;
+  onStderr?: (chunk: string) => void;
+  onExit?: (exitCode: number | null) => void;
+  onError?: (error: Error) => void;
+}
+
+export interface AIRunHandle {
+  commandSummary: string;
+  stop: () => void;
+}
+
+export interface AIProviderResolvedCommand {
+  command: string;
+  args: string[];
+  cwd: string;
+}
+
+export interface AIProviderAdapter {
+  buildRequest: (request: AIRunRequest) => AIProviderResolvedCommand;
+}
+
+export interface AICommandPanelState {
+  selectedProviderId: AIProviderId;
+  prompt: string;
+  contextSelection: AIContextSelection;
+  execution: AIExecutionState;
 }
 
 export interface PriorityOption {

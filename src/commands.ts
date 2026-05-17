@@ -130,6 +130,14 @@ export function registerDailyTodoListCommands(plugin: DailyTodoListPlugin): void
   });
 
   plugin.addCommand({
+    id: 'open-daily-todolist-wide-view',
+    name: 'Open Vault Atlas HQ in wide workspace',
+    callback: async () => {
+      await plugin.openView('wide');
+    },
+  });
+
+  plugin.addCommand({
     id: 'add-todo-to-today',
     name: 'Add todo to today',
     callback: () => {
@@ -172,6 +180,14 @@ export function registerDailyTodoListCommands(plugin: DailyTodoListPlugin): void
     name: 'Open Vault Atlas gantt',
     callback: async () => {
       await plugin.activateView('gantt');
+    },
+  });
+
+  plugin.addCommand({
+    id: 'open-ai-command-panel',
+    name: 'Open Vault Atlas AI panel',
+    callback: async () => {
+      await plugin.activateView('ai');
     },
   });
 

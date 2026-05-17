@@ -1,9 +1,9 @@
-import { Plugin } from 'obsidian';
+import { Notice, Plugin } from 'obsidian';
 import { registerDailyTodoListCommands } from './commands';
-import { DAILY_TODOLIST_VIEW_TYPE, DailyTodoListView, type DailyTodoListTab } from './view';
+import { DAILY_TODOLIST_VIEW_TYPE, DailyTodoListView } from './view';
 import { DailyTodoListSettingTab, DEFAULT_SETTINGS } from './settings';
 import { analyzeVault } from './vault-analytics';
-import type { DailyTodoListSettings, VaultAnalytics } from './types';
+import type { DailyTodoListSettings, DailyTodoListTab, VaultAnalytics } from './types';
 
 export default class DailyTodoListPlugin extends Plugin {
   settings: DailyTodoListSettings;
@@ -11,6 +11,10 @@ export default class DailyTodoListPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
+
+    if (!this.isDesktopApp()) {
+      new Notice('AI Command Panel 仅支持桌面端 Obsidian。');
+    }
 
     this.registerView(
       DAILY_TODOLIST_VIEW_TYPE,
@@ -41,15 +45,25 @@ export default class DailyTodoListPlugin extends Plugin {
   }
 
   async activateView(tab?: DailyTodoListTab): Promise<void> {
+    await this.openView('sidebar', tab);
+  }
+
+  async openView(mode: 'sidebar' | 'wide', tab?: DailyTodoListTab): Promise<void> {
     const leaves = this.app.workspace.getLeavesOfType(DAILY_TODOLIST_VIEW_TYPE);
-    if (leaves.length > 0) {
-      this.app.workspace.revealLeaf(leaves[0]);
-      const view = leaves[0].view;
+    const matchingLeaf = leaves.find((leaf) => {
+      if (mode === 'wide') return leaf.getRoot() !== this.app.workspace.rightSplit;
+      return leaf.getRoot() === this.app.workspace.rightSplit;
+    });
+    if (matchingLeaf) {
+      this.app.workspace.revealLeaf(matchingLeaf);
+      const view = matchingLeaf.view;
       if (tab && view instanceof DailyTodoListView) await view.setTab(tab);
       return;
     }
 
-    const leaf = this.app.workspace.getRightLeaf(false);
+    const leaf = mode === 'wide'
+      ? this.app.workspace.getLeaf(false)
+      : this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
 
     await leaf.setViewState({ type: DAILY_TODOLIST_VIEW_TYPE, active: true });
@@ -76,6 +90,10 @@ export default class DailyTodoListPlugin extends Plugin {
 
   invalidateVaultAnalytics(): void {
     this.vaultAnalyticsPromise = null;
+  }
+
+  isDesktopApp(): boolean {
+    return typeof process !== 'undefined' && process.platform !== undefined;
   }
 
   async loadSettings(): Promise<void> {

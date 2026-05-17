@@ -12,11 +12,16 @@ import { buildCalendarGrid, getMonthSummaries } from './calendar';
 import { createMermaidGantt, enrichTask, readTasksForDateRange, scheduledTasks } from './schedule';
 import { addMemoToContent, deleteMemoFromContent, parseMemosFromContent, readMemosForDateRange } from './memos';
 import { readJournalForDate, readJournalsForDateRange, upsertJournalInContent } from './journal';
+import { runAIProviderCommand } from './ai-command';
 import { formatTaskInput, validateTaskScheduleInput } from './task-format';
 import { EditTaskModal } from './edit-task-modal';
 import { getPriorityOption, renderPriorityBadge } from './ui';
 import type {
   CalendarDaySummary,
+  AICommandPanelState,
+  AIContextAttachment,
+  AIProviderConfig,
+  AIRunHandle,
   DailyJournal,
   DailyMemo,
   DailyTask,
@@ -27,7 +32,7 @@ import type {
 } from './types';
 
 export const DAILY_TODOLIST_VIEW_TYPE = 'daily-todolist-view';
-export type DailyTodoListTab = 'home' | 'today' | 'journal' | 'memo' | 'calendar' | 'gantt' | 'stats';
+export type DailyTodoListTab = 'home' | 'today' | 'journal' | 'memo' | 'calendar' | 'gantt' | 'stats' | 'ai';
 type GanttRangePreset = 'week' | 'month' | 'quarter' | null;
 
 function parseGanttMoment(value: string, endOfDay = false): moment.Moment {
@@ -45,6 +50,13 @@ export class DailyTodoListView extends ItemView {
   private priorityEl: HTMLSelectElement | null = null;
   private memoInputEl: HTMLTextAreaElement | null = null;
   private journalInputEl: HTMLTextAreaElement | null = null;
+  private aiPromptEl: HTMLTextAreaElement | null = null;
+  private aiProviderEl: HTMLSelectElement | null = null;
+  private aiCurrentNoteToggleEl: HTMLInputElement | null = null;
+  private aiTodayJournalToggleEl: HTMLInputElement | null = null;
+  private aiTodayTasksToggleEl: HTMLInputElement | null = null;
+  private aiRunHandle: AIRunHandle | null = null;
+  private aiState: AICommandPanelState;
   private activeTab: DailyTodoListTab;
   private selectedDate = window.moment().format('YYYY-MM-DD');
   private currentMonth = window.moment().format('YYYY-MM');
@@ -57,6 +69,21 @@ export class DailyTodoListView extends ItemView {
     super(leaf);
     this.plugin = plugin;
     this.activeTab = plugin.settings.calendarDefaultView;
+    this.aiState = {
+      selectedProviderId: plugin.settings.aiProviders[0]?.id ?? 'claude-code',
+      prompt: '',
+      contextSelection: {
+        currentNote: true,
+        todayJournal: false,
+        todayTasks: false,
+      },
+      execution: {
+        status: 'idle',
+        stdout: '',
+        stderr: '',
+        commandSummary: '',
+      },
+    };
   }
 
   getViewType(): string {
@@ -86,8 +113,10 @@ export class DailyTodoListView extends ItemView {
     const container = this.containerEl.children[1];
     container.empty();
     const root = container.createDiv({ cls: 'daily-todolist-view' });
+    if (this.isWideWorkspace()) root.addClass('is-wide-workspace');
     this.renderHeader(root);
     const body = root.createDiv({ cls: 'daily-todolist-body' });
+    if (this.isWideWorkspace()) body.addClass('is-wide-workspace');
 
     requestAnimationFrame(() => {
       void this.renderActiveTab(body, refreshId);
@@ -109,6 +138,8 @@ export class DailyTodoListView extends ItemView {
       await this.renderJournal(root, refreshId);
     } else if (this.activeTab === 'stats') {
       await this.renderStats(root, refreshId);
+    } else if (this.activeTab === 'ai') {
+      await this.renderAI(root, refreshId);
     } else {
       await this.renderToday(root, refreshId);
     }
@@ -116,6 +147,10 @@ export class DailyTodoListView extends ItemView {
 
   private canRender(refreshId: number): boolean {
     return refreshId === this.refreshId;
+  }
+
+  private isWideWorkspace(): boolean {
+    return this.leaf.getRoot() !== this.app.workspace.rightSplit;
   }
 
   private renderHeader(root: HTMLElement): void {
@@ -131,6 +166,7 @@ export class DailyTodoListView extends ItemView {
     this.renderTabButton(tabs, 'calendar', '日历');
     this.renderTabButton(tabs, 'gantt', '甘特图');
     this.renderTabButton(tabs, 'stats', '统计');
+    this.renderTabButton(tabs, 'ai', 'AI');
   }
 
   private renderTabButton(parent: HTMLElement, tab: DailyTodoListTab, text: string): void {
@@ -245,6 +281,9 @@ export class DailyTodoListView extends ItemView {
       this.plugin.invalidateVaultAnalytics();
       await this.refresh();
     });
+    quick.createEl('button', { text: '宽屏打开' }).addEventListener('click', async () => {
+      await this.plugin.openView('wide', this.activeTab);
+    });
     this.renderQuickTabButton(quick, 'today', '记录待办');
     this.renderQuickTabButton(quick, 'journal', hasJournalToday ? '继续写日记' : '写日记');
     this.renderQuickTabButton(quick, 'memo', '写备忘录');
@@ -332,6 +371,82 @@ export class DailyTodoListView extends ItemView {
       cls: 'daily-todolist-stats',
       text: journal.text.trim().length > 0 ? '今日日记已存在内容' : '今日日记还是空白',
     });
+  }
+
+  private async renderAI(root: HTMLElement, refreshId: number): Promise<void> {
+    root.empty();
+    if (!this.plugin.isDesktopApp()) {
+      root.createDiv({ cls: 'daily-todolist-empty', text: 'AI Command Panel 仅支持桌面端 Obsidian。' });
+      return;
+    }
+
+    const panel = root.createDiv({ cls: 'daily-todolist-compose daily-todolist-memo-compose' });
+    panel.createDiv({ cls: 'daily-todolist-compose-title', text: 'AI Command Panel' });
+
+    const providerField = panel.createDiv({ cls: 'daily-todolist-field' });
+    providerField.createDiv({ cls: 'daily-todolist-field-label', text: 'Provider' });
+    this.aiProviderEl = providerField.createEl('select', { cls: 'daily-todolist-priority-select' });
+    for (const provider of this.plugin.settings.aiProviders.filter((item) => item.enabled)) {
+      this.aiProviderEl.createEl('option', { text: provider.label, value: provider.id });
+    }
+    this.aiProviderEl.value = this.aiState.selectedProviderId;
+    this.aiProviderEl.addEventListener('change', () => {
+      this.aiState.selectedProviderId = this.aiProviderEl?.value as AIProviderConfig['id'];
+    });
+
+    this.aiPromptEl = panel.createEl('textarea', {
+      cls: 'daily-todolist-input daily-todolist-memo-input',
+      attr: { placeholder: '输入要交给 AI CLI 的 prompt...' },
+    });
+    this.aiPromptEl.value = this.aiState.prompt;
+    this.aiPromptEl.addEventListener('input', () => {
+      this.aiState.prompt = this.aiPromptEl?.value ?? '';
+    });
+
+    const toggles = panel.createDiv({ cls: 'daily-todolist-actions' });
+    this.aiCurrentNoteToggleEl = this.createAICheckbox(toggles, '当前笔记', this.aiState.contextSelection.currentNote, (value) => {
+      this.aiState.contextSelection.currentNote = value;
+    });
+    this.aiTodayJournalToggleEl = this.createAICheckbox(toggles, '今日日记', this.aiState.contextSelection.todayJournal, (value) => {
+      this.aiState.contextSelection.todayJournal = value;
+    });
+    this.aiTodayTasksToggleEl = this.createAICheckbox(toggles, '今日任务', this.aiState.contextSelection.todayTasks, (value) => {
+      this.aiState.contextSelection.todayTasks = value;
+    });
+
+    const actions = panel.createDiv({ cls: 'daily-todolist-actions' });
+    actions.createEl('button', { cls: 'daily-todolist-add-button', text: '运行' })
+      .addEventListener('click', () => this.runAICommand());
+    actions.createEl('button', { text: '停止' })
+      .addEventListener('click', () => this.stopAICommand());
+    actions.createEl('button', { text: '存为备忘录' })
+      .addEventListener('click', () => this.saveAIOutputToMemo());
+    actions.createEl('button', { text: '追加到日记' })
+      .addEventListener('click', () => this.saveAIOutputToJournal());
+    actions.createEl('button', { text: '新建笔记' })
+      .addEventListener('click', () => this.saveAIOutputToNote());
+
+    root.createDiv({
+      cls: 'daily-todolist-stats',
+      text: `状态：${this.aiState.execution.status}${this.aiState.execution.commandSummary ? ` · ${this.aiState.execution.commandSummary}` : ''}`,
+    });
+
+    const output = root.createDiv({ cls: 'daily-todolist-list daily-todolist-memo-list' });
+    output.createDiv({ cls: 'daily-todolist-item-text', text: this.aiState.execution.stdout || '标准输出会显示在这里。' });
+    if (this.aiState.execution.stderr.trim().length > 0) {
+      output.createDiv({ cls: 'daily-todolist-item-text', text: this.aiState.execution.stderr });
+    }
+
+    if (!this.canRender(refreshId)) return;
+  }
+
+  private createAICheckbox(parent: HTMLElement, label: string, checked: boolean, onChange: (value: boolean) => void): HTMLInputElement {
+    const wrapper = parent.createEl('label', { cls: 'daily-todolist-field-label' });
+    const input = wrapper.createEl('input', { type: 'checkbox' });
+    input.checked = checked;
+    input.addEventListener('change', () => onChange(input.checked));
+    wrapper.appendText(` ${label}`);
+    return input;
   }
 
   private async saveJournalFromInput(): Promise<void> {
@@ -991,6 +1106,158 @@ export class DailyTodoListView extends ItemView {
     this.clearCaches();
     if (this.memoInputEl) this.memoInputEl.value = '';
     await this.refresh();
+  }
+
+  private getSelectedAIProvider(): AIProviderConfig | null {
+    const providerId = this.aiProviderEl?.value ?? this.aiState.selectedProviderId;
+    return this.plugin.settings.aiProviders.find((provider) => provider.id === providerId && provider.enabled) ?? null;
+  }
+
+  private async collectAIContext(): Promise<AIContextAttachment[]> {
+    const attachments: AIContextAttachment[] = [];
+
+    if (this.aiState.contextSelection.currentNote) {
+      const file = this.app.workspace.getActiveFile();
+      if (file) {
+        const content = await this.app.vault.read(file);
+        attachments.push({ source: 'current-note', label: `当前笔记: ${file.basename}`, content });
+      }
+    }
+
+    if (this.aiState.contextSelection.todayJournal) {
+      const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
+      if (file) {
+        const journal = await this.readJournal(file);
+        if (journal.text.trim()) attachments.push({ source: 'today-journal', label: '今日日记', content: journal.text });
+      }
+    }
+
+    if (this.aiState.contextSelection.todayTasks) {
+      const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
+      if (file) {
+        const tasks = await this.readTasks(file);
+        if (tasks.length > 0) {
+          const content = tasks.map((task) => `- ${task.displayText || task.text}`).join('\n');
+          attachments.push({ source: 'today-tasks', label: '今日任务', content });
+        }
+      }
+    }
+
+    return attachments;
+  }
+
+  private async runAICommand(): Promise<void> {
+    const provider = this.getSelectedAIProvider();
+    if (!provider) {
+      new Notice('请先启用并选择一个 AI provider。');
+      return;
+    }
+
+    const prompt = this.aiPromptEl?.value.trim() ?? '';
+    if (!prompt) {
+      new Notice('请输入 prompt。');
+      return;
+    }
+
+    const attachments = await this.collectAIContext();
+    const contextText = attachments.map((item) => `## ${item.label}\n\n${item.content}`).join('\n\n');
+    const activeFile = this.app.workspace.getActiveFile();
+    const workingDirectory = provider.workingDirectory.trim() || activeFile?.parent?.path || '/';
+
+    this.aiState.execution = {
+      status: 'running',
+      stdout: '',
+      stderr: '',
+      commandSummary: '',
+    };
+    await this.refresh();
+
+    this.aiRunHandle = runAIProviderCommand(
+      {
+        provider,
+        prompt,
+        contextText,
+        workingDirectory,
+      },
+      {
+        onStdout: (chunk) => {
+          this.aiState.execution.stdout += chunk;
+          void this.refresh();
+        },
+        onStderr: (chunk) => {
+          this.aiState.execution.stderr += chunk;
+          void this.refresh();
+        },
+        onExit: (code) => {
+          this.aiState.execution.status = code === 0 ? 'success' : 'error';
+          this.aiRunHandle = null;
+          void this.refresh();
+        },
+        onError: (error) => {
+          this.aiState.execution.status = 'error';
+          this.aiState.execution.stderr += `${error.message}\n`;
+          this.aiRunHandle = null;
+          void this.refresh();
+        },
+      },
+    );
+    this.aiState.execution.commandSummary = this.aiRunHandle.commandSummary;
+    await this.refresh();
+  }
+
+  private stopAICommand(): void {
+    if (!this.aiRunHandle) return;
+    this.aiRunHandle.stop();
+    this.aiRunHandle = null;
+    this.aiState.execution.status = 'stopped';
+    void this.refresh();
+  }
+
+  private getAIOutputText(): string {
+    return [this.aiState.execution.stdout.trim(), this.aiState.execution.stderr.trim()].filter(Boolean).join('\n\n');
+  }
+
+  private async saveAIOutputToMemo(): Promise<void> {
+    const text = this.getAIOutputText();
+    if (!text) return;
+    const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
+    if (!file) return;
+    const content = await this.app.vault.read(file);
+    const nextContent = addMemoToContent(content, this.plugin.settings.memoHeading, text);
+    await this.app.vault.modify(file, nextContent);
+    this.clearCaches();
+    new Notice('AI 输出已保存到备忘录');
+  }
+
+  private async saveAIOutputToJournal(): Promise<void> {
+    const text = this.getAIOutputText();
+    if (!text) return;
+    const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
+    if (!file) return;
+    const content = await this.app.vault.read(file);
+    const journal = await this.readJournal(file);
+    const nextContent = upsertJournalInContent(
+      content,
+      this.plugin.settings.journalHeading,
+      [journal.text.trim(), text].filter(Boolean).join('\n\n'),
+    );
+    await this.app.vault.modify(file, nextContent);
+    this.clearCaches();
+    new Notice('AI 输出已追加到日记');
+  }
+
+  private async saveAIOutputToNote(): Promise<void> {
+    const text = this.getAIOutputText();
+    if (!text) return;
+    const folder = this.plugin.settings.aiOutputFolder.trim();
+    if (folder) {
+      await this.app.vault.createFolder(folder).catch(() => undefined);
+    }
+    const filename = `AI Output ${window.moment().format('YYYY-MM-DD HH-mm-ss')}.md`;
+    const path = folder ? `${folder}/${filename}` : filename;
+    const file = await this.app.vault.create(path, text);
+    await this.app.workspace.getLeaf(false).openFile(file);
+    new Notice('AI 输出已保存为新笔记');
   }
 
   private async deleteMemo(file: TFile, memo: DailyMemo): Promise<void> {

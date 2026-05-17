@@ -1004,6 +1004,62 @@
   font-size: var(--font-ui-small);
 }
 
+@media (min-width: 1100px) {
+  .daily-todolist-view.is-wide-workspace {
+    padding: 20px;
+    gap: 16px;
+  }
+
+  .daily-todolist-view.is-wide-workspace .daily-todolist-overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .daily-todolist-view.is-wide-workspace .daily-todolist-home-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .daily-todolist-view.is-wide-workspace .daily-todolist-atlas-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .daily-todolist-view.is-wide-workspace .daily-todolist-insight-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .daily-todolist-view.is-wide-workspace .daily-todolist-date-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .daily-todolist-view.is-wide-workspace .daily-todolist-home-hero,
+  .daily-todolist-view.is-wide-workspace .daily-todolist-gantt-hero {
+    padding: 26px;
+  }
+
+  .daily-todolist-view.is-wide-workspace .daily-todolist-gantt-timeline {
+    padding-inline: 20px;
+  }
+
+  .daily-todolist-view.is-wide-workspace .daily-todolist-gantt-scale {
+    min-width: 1040px;
+  }
+
+  .daily-todolist-view.is-wide-workspace .daily-todolist-gantt-row {
+    grid-template-columns: 160px minmax(1040px, 1fr);
+  }
+
+  .daily-todolist-view.is-wide-workspace .daily-todolist-compose.daily-todolist-memo-compose {
+    max-width: none;
+  }
+
+  .daily-todolist-view.is-wide-workspace .daily-todolist-memo-input {
+    min-height: 140px;
+  }
+
+  .daily-todolist-view.is-wide-workspace .daily-todolist-actions {
+    flex-wrap: wrap;
+  }
+}
+
 @media (max-width: 720px) {
   .daily-todolist-home-hero,
   .daily-todolist-gantt-hero,
