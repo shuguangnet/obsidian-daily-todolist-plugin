@@ -2,12 +2,14 @@ import { Plugin } from 'obsidian';
 import { registerDailyTodoListCommands } from './commands';
 import { DAILY_TODOLIST_VIEW_TYPE, DailyTodoListView } from './view';
 import { DailyTodoListSettingTab, DEFAULT_SETTINGS } from './settings';
+import { NotificationService } from './notification';
 import { analyzeVault } from './vault-analytics';
 import type { DailyTodoListSettings, DailyTodoListTab, VaultAnalytics } from './types';
 
 export default class DailyTodoListPlugin extends Plugin {
   settings: DailyTodoListSettings;
   private vaultAnalyticsPromise: Promise<VaultAnalytics> | null = null;
+  private notificationService: NotificationService | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -19,6 +21,7 @@ export default class DailyTodoListPlugin extends Plugin {
 
     registerDailyTodoListCommands(this);
     this.addSettingTab(new DailyTodoListSettingTab(this.app, this));
+    this.notificationService = new NotificationService(this);
 
     this.addRibbonIcon('layout-dashboard', 'Vault Atlas HQ', () => {
       this.activateView();
@@ -34,9 +37,14 @@ export default class DailyTodoListPlugin extends Plugin {
         this.activateView();
       });
     }
+
+    this.app.workspace.onLayoutReady(() => {
+      this.refreshNotificationService();
+    });
   }
 
   async onunload(): Promise<void> {
+    this.notificationService?.stop();
     this.app.workspace.detachLeavesOfType(DAILY_TODOLIST_VIEW_TYPE);
   }
 
@@ -88,12 +96,36 @@ export default class DailyTodoListPlugin extends Plugin {
     this.vaultAnalyticsPromise = null;
   }
 
+  refreshNotificationService(): void {
+    if (!this.notificationService) return;
+    if (!this.settings.notificationsEnabled) {
+      this.notificationService.stop();
+      return;
+    }
+    this.notificationService.start();
+  }
+
+  stopNotificationService(): void {
+    this.notificationService?.stop();
+  }
+
+  async sendManualDigest(): Promise<void> {
+    if (!this.notificationService) return;
+    await this.notificationService.sendManualDigest();
+  }
+
+  async sendTestWebhook(): Promise<void> {
+    if (!this.notificationService) return;
+    await this.notificationService.sendTestWebhook();
+  }
+
   async loadSettings(): Promise<void> {
     const loaded = await this.loadData();
     this.settings = {
       ...DEFAULT_SETTINGS,
       ...loaded,
       priorityOptions: loaded?.priorityOptions ?? DEFAULT_SETTINGS.priorityOptions,
+      notificationHistory: loaded?.notificationHistory ?? DEFAULT_SETTINGS.notificationHistory,
     };
   }
 

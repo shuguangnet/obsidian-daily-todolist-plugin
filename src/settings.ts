@@ -21,6 +21,21 @@ export const DEFAULT_SETTINGS: DailyTodoListSettings = {
     { id: 'medium', label: '中优先级', color: '#d97706' },
     { id: 'high', label: '高优先级', color: '#dc2626' },
   ],
+  notificationsEnabled: false,
+  notificationTimes: '09:00,18:00,21:30',
+  notificationGraceMinutes: 10,
+  notificationIncludePending: true,
+  notificationIncludeCompleted: true,
+  notificationIncludeJournal: true,
+  notificationIncludeMemos: false,
+  localNoticeEnabled: true,
+  systemNotificationEnabled: false,
+  webhookEnabled: false,
+  webhookUrl: '',
+  webhookMethod: 'POST',
+  webhookSecret: '',
+  webhookHeaders: '',
+  notificationHistory: {},
 };
 
 export class DailyTodoListSettingTab extends PluginSettingTab {
@@ -185,6 +200,150 @@ export class DailyTodoListSettingTab extends PluginSettingTab {
           this.plugin.settings.ganttLookaheadDays = Math.max(0, Number.parseInt(value, 10) || 0);
           await this.plugin.saveSettings();
           this.plugin.refreshViews();
+        }));
+
+    containerEl.createEl('h3', { text: '通知与 Webhook' });
+
+    new Setting(containerEl)
+      .setName('启用定时通知')
+      .setDesc('按设定时间汇总今日未完成、已完成待办与日记，并推送到本地或 webhook。')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.notificationsEnabled)
+        .onChange(async (value) => {
+          this.plugin.settings.notificationsEnabled = value;
+          await this.plugin.saveSettings();
+          this.plugin.refreshNotificationService();
+        }));
+
+    new Setting(containerEl)
+      .setName('通知时间')
+      .setDesc('使用 24 小时制，多个时间用英文逗号分隔，例如 09:00,18:00,21:30。')
+      .addText((text) => text
+        .setPlaceholder('09:00,18:00,21:30')
+        .setValue(this.plugin.settings.notificationTimes)
+        .onChange(async (value) => {
+          this.plugin.settings.notificationTimes = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('补发窗口（分钟）')
+      .setDesc('Obsidian 在计划时间后多少分钟内启动，仍允许补发该时段通知。')
+      .addText((text) => text
+        .setPlaceholder('10')
+        .setValue(String(this.plugin.settings.notificationGraceMinutes))
+        .onChange(async (value) => {
+          this.plugin.settings.notificationGraceMinutes = Math.max(0, Number.parseInt(value, 10) || 0);
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('包含未完成待办')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.notificationIncludePending)
+        .onChange(async (value) => {
+          this.plugin.settings.notificationIncludePending = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('包含今日已完成')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.notificationIncludeCompleted)
+        .onChange(async (value) => {
+          this.plugin.settings.notificationIncludeCompleted = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('包含今日日记')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.notificationIncludeJournal)
+        .onChange(async (value) => {
+          this.plugin.settings.notificationIncludeJournal = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('包含今日备忘录')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.notificationIncludeMemos)
+        .onChange(async (value) => {
+          this.plugin.settings.notificationIncludeMemos = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Obsidian 内提醒')
+      .setDesc('使用 Notice 在应用内弹出摘要。')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.localNoticeEnabled)
+        .onChange(async (value) => {
+          this.plugin.settings.localNoticeEnabled = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('系统通知')
+      .setDesc('使用浏览器 Notification API。部分平台可能需要系统权限。')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.systemNotificationEnabled)
+        .onChange(async (value) => {
+          this.plugin.settings.systemNotificationEnabled = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('启用 webhook')
+      .setDesc('向外部自动化平台发送 JSON 摘要，例如 n8n、飞书机器人或自建服务。')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.webhookEnabled)
+        .onChange(async (value) => {
+          this.plugin.settings.webhookEnabled = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Webhook URL')
+      .addText((text) => text
+        .setPlaceholder('https://example.com/webhook')
+        .setValue(this.plugin.settings.webhookUrl)
+        .onChange(async (value) => {
+          this.plugin.settings.webhookUrl = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Webhook 方法')
+      .addDropdown((dropdown) => dropdown
+        .addOption('POST', 'POST')
+        .addOption('PUT', 'PUT')
+        .setValue(this.plugin.settings.webhookMethod)
+        .onChange(async (value: 'POST' | 'PUT') => {
+          this.plugin.settings.webhookMethod = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Webhook Secret')
+      .setDesc('如果填写，会作为 `x-dtl-secret` 请求头发送。')
+      .addText((text) => text
+        .setPlaceholder('optional-secret')
+        .setValue(this.plugin.settings.webhookSecret)
+        .onChange(async (value) => {
+          this.plugin.settings.webhookSecret = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('自定义请求头')
+      .setDesc('填写 JSON 对象，例如 {\"Authorization\":\"Bearer xxx\"}。解析失败时会忽略。')
+      .addTextArea((text) => text
+        .setPlaceholder('{"Authorization":"Bearer xxx"}')
+        .setValue(this.plugin.settings.webhookHeaders)
+        .onChange(async (value) => {
+          this.plugin.settings.webhookHeaders = value.trim();
+          await this.plugin.saveSettings();
         }));
 
     containerEl.createEl('h3', { text: '优先级' });

@@ -210,4 +210,28 @@ export function registerDailyTodoListCommands(plugin: DailyTodoListPlugin): void
     name: 'Open today daily note',
     callback: () => openTodayDailyNote(plugin.app, plugin.settings),
   });
+
+  plugin.addCommand({
+    id: 'send-daily-digest-now',
+    name: 'Send daily digest now',
+    callback: async () => {
+      try {
+        await plugin.sendManualDigest();
+      } catch (error) {
+        new Notice(error instanceof Error ? error.message : '发送摘要失败');
+      }
+    },
+  });
+
+  plugin.addCommand({
+    id: 'send-test-webhook',
+    name: 'Send test webhook',
+    callback: async () => {
+      try {
+        await plugin.sendTestWebhook();
+      } catch (error) {
+        new Notice(error instanceof Error ? error.message : 'Webhook 测试失败');
+      }
+    },
+  });
 }

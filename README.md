@@ -11,8 +11,9 @@ Vault Atlas HQ 是一个面向 Obsidian 知识库主页的插件。它一边保�
 - **甘特图排期**：读取任务中的排期元数据，提供高级时间轴视图，并可渲染 / 插入 Mermaid gantt。
 - **统计面板**：按当前月份统计 TodoList 与 Memo，同时补充 Vault 级别的标签、frontmatter、未解析链接、结构层级和新建笔记数据。
 - **优先级标记**：添加任务时可选择优先级，并按设置页配置的颜色展示在任务卡片和甘特图任务条中。
+- **定时通知与 webhook**：按设定时间自动汇总今日未完成任务、今日已完成、日记和备忘录，可通过 Obsidian Notice、系统通知或 webhook 推送到自动化平台。
 - **命令面板**：支持打开今日视图、日历视图、甘特图视图、宽工作区视图、添加今日待办、打开今日笔记、插入甘特图到今日笔记。
-- **设置页**：支持 Daily Notes 设置复用、标题名、插入位置、显示已完成、自动创建 Daily Note、默认视图、甘特图读取范围和优先级颜色。
+- **设置页**：支持 Daily Notes 设置复用、标题名、插入位置、显示已完成、自动创建 Daily Note、默认视图、甘特图读取范围、优先级颜色以及通知/Webhook 配置。
 
 ## 任务语法
 
@@ -92,6 +93,59 @@ Vault Atlas HQ 是一个面向 Obsidian 知识库主页的插件。它一边保�
 - 已完成任务弱化展示，逾期任务突出提示。
 - 可一键渲染 Mermaid 甘特图预览。
 
+## 通知与 Webhook
+
+插件会按设置页中的 `通知时间` 轮询当前时间；当时间命中且仍处于 `补发窗口（分钟）` 内时，会自动生成今日摘要。摘要可包含：
+
+- 今日未完成待办
+- 今日已完成待办
+- 今日日记
+- 今日备忘录
+
+支持的通知通道：
+
+- `Obsidian 内提醒`：在应用内显示 Notice
+- `系统通知`：使用浏览器 Notification API
+- `webhook`：以 JSON 形式发送到你的自动化系统
+
+常见 webhook 场景：
+
+- 发到 n8n / Make / Zapier，再转企业微信、飞书、Telegram
+- 发到自建服务，写入数据库或日志
+- 发到机器人网关，推送“晚间复盘”摘要
+
+Webhook 会发送结构化 JSON，核心字段包括：
+
+```json
+{
+  "plugin": "obsidian-daily-todolist",
+  "pluginName": "Vault Atlas HQ",
+  "reason": "scheduled",
+  "slot": "21:30",
+  "date": "2026-05-18",
+  "filePath": "Daily Notes/2026-05-18.md",
+  "summary": {
+    "pendingCount": 3,
+    "completedCount": 5,
+    "memoCount": 2,
+    "hasJournal": true
+  },
+  "blocks": {
+    "pending": [],
+    "completed": [],
+    "journal": "....",
+    "memos": []
+  },
+  "text": "# 2026-05-18 Daily Digest ..."
+}
+```
+
+如果配置了 `Webhook Secret`，插件会额外发送请求头 `x-dtl-secret`。`自定义请求头` 支持直接填写 JSON，例如：
+
+```json
+{"Authorization":"Bearer your-token"}
+```
+
 ### 宽工作区模式
 
 宽工作区模式用于把 Vault Atlas HQ 打开到主工作区，而不是只占用右侧窄栏。它更适合这些场景：
@@ -131,6 +185,8 @@ npm run build
 | `Open Vault Atlas gantt` | 打开甘特图页签 |
 | `Insert Daily TodoList gantt to today note` | 将当前范围的 Mermaid 甘特图插入今日笔记 |
 | `Open today daily note` | 打开今日 Daily Note |
+| `Send daily digest now` | 立即发送一份今日摘要，便于手动触发 |
+| `Send test webhook` | 立即向 webhook URL 发送一次测试摘要 |
 
 ## 目录结构
 

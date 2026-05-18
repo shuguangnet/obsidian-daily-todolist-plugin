@@ -15,6 +15,21 @@ export interface DailyTodoListSettings {
   ganttLookbackDays: number;
   ganttLookaheadDays: number;
   priorityOptions: PriorityOption[];
+  notificationsEnabled: boolean;
+  notificationTimes: string;
+  notificationGraceMinutes: number;
+  notificationIncludePending: boolean;
+  notificationIncludeCompleted: boolean;
+  notificationIncludeJournal: boolean;
+  notificationIncludeMemos: boolean;
+  localNoticeEnabled: boolean;
+  systemNotificationEnabled: boolean;
+  webhookEnabled: boolean;
+  webhookUrl: string;
+  webhookMethod: 'POST' | 'PUT';
+  webhookSecret: string;
+  webhookHeaders: string;
+  notificationHistory: Record<string, number>;
 }
 
 export interface PriorityOption {
@@ -57,6 +72,15 @@ export interface DailyJournal {
   text: string;
   date: string;
   filePath: string;
+}
+
+export interface NotificationDigest {
+  date: string;
+  filePath: string;
+  pendingTasks: DailyTask[];
+  completedTasks: DailyTask[];
+  journal: DailyJournal | null;
+  memos: DailyMemo[];
 }
 
 export interface CalendarDaySummary {
