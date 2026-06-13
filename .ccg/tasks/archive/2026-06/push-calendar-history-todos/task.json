@@ -1,0 +1,12 @@
+{
+  "id": "push-calendar-history-todos",
+  "title": "提交并推送历史日期日历待办功能",
+  "status": "completed",
+  "complexity": "S",
+  "risk": "low",
+  "domain": "devops",
+  "currentPhase": "completed",
+  "nextAction": "归档任务并推送",
+  "createdAt": "2026-06-13T02:20:29Z",
+  "branch": "main"
+}
