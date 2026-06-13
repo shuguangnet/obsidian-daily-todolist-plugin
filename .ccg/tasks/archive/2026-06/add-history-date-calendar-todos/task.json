@@ -1,0 +1,12 @@
+{
+  "id": "add-history-date-calendar-todos",
+  "title": "每日待办支持为历史日期添加，并可通过日历添加",
+  "status": "completed",
+  "complexity": "M",
+  "risk": "medium",
+  "domain": "frontend",
+  "currentPhase": "completed",
+  "nextAction": "归档任务",
+  "createdAt": "2026-06-13T02:14:23Z",
+  "branch": "main"
+}
