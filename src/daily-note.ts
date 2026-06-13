@@ -89,13 +89,17 @@ export async function ensureFolderExists(app: App, folderPath: string): Promise<
   }
 }
 
-export async function getOrCreateTodayDailyNote(app: App, settings: DailyTodoListSettings): Promise<TFile | null> {
-  const path = getTodayDailyNotePath(app, settings);
+export async function getOrCreateDailyNoteForDate(
+  app: App,
+  settings: DailyTodoListSettings,
+  date: string,
+): Promise<TFile | null> {
+  const path = getDailyNotePathForDate(app, settings, date);
   const existing = app.vault.getAbstractFileByPath(path);
   if (existing instanceof TFile) return existing;
 
   if (!settings.autoCreateDailyNote) {
-    new Notice(`今日 Daily Note 不存在：${path}`);
+    new Notice(`${date} Daily Note 不存在：${path}`);
     return null;
   }
 
@@ -104,10 +108,22 @@ export async function getOrCreateTodayDailyNote(app: App, settings: DailyTodoLis
   return app.vault.create(path, '');
 }
 
-export async function openTodayDailyNote(app: App, settings: DailyTodoListSettings): Promise<void> {
-  const file = await getOrCreateTodayDailyNote(app, settings);
+export async function getOrCreateTodayDailyNote(app: App, settings: DailyTodoListSettings): Promise<TFile | null> {
+  return getOrCreateDailyNoteForDate(app, settings, window.moment().format('YYYY-MM-DD'));
+}
+
+export async function openDailyNoteForDate(
+  app: App,
+  settings: DailyTodoListSettings,
+  date: string,
+): Promise<void> {
+  const file = await getOrCreateDailyNoteForDate(app, settings, date);
   if (!file) return;
 
   const leaf = app.workspace.getLeaf(false);
   await leaf.openFile(file);
+}
+
+export async function openTodayDailyNote(app: App, settings: DailyTodoListSettings): Promise<void> {
+  await openDailyNoteForDate(app, settings, window.moment().format('YYYY-MM-DD'));
 }

@@ -352,6 +352,10 @@
   color: var(--text-accent);
 }
 
+.daily-todolist-calendar-compose {
+  box-shadow: none;
+}
+
 .daily-todolist-home-hero {
   position: relative;
   display: grid;

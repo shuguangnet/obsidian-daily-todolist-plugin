@@ -1,6 +1,12 @@
 import { ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf } from 'obsidian';
 import type DailyTodoListPlugin from './main';
-import { getDailyNotePathForDate, getOrCreateTodayDailyNote, openTodayDailyNote } from './daily-note';
+import {
+  getDailyNotePathForDate,
+  getOrCreateDailyNoteForDate,
+  getOrCreateTodayDailyNote,
+  openDailyNoteForDate,
+  openTodayDailyNote,
+} from './daily-note';
 import {
   addTaskToContent,
   deleteTaskFromContent,
@@ -149,25 +155,11 @@ export class DailyTodoListView extends ItemView {
 
   private async renderToday(root: HTMLElement, refreshId: number): Promise<void> {
     root.empty();
-    const compose = root.createDiv({ cls: 'daily-todolist-compose' });
-    compose.createDiv({ cls: 'daily-todolist-compose-title', text: '快速捕捉' });
-    this.inputEl = compose.createEl('input', {
-      type: 'text',
-      cls: 'daily-todolist-input',
-      attr: { placeholder: '写下今天最重要的一件事...' },
+    this.renderTodoComposer(root, {
+      title: '快速捕捉',
+      placeholder: '写下今天最重要的一件事...',
+      buttonText: '添加到今日',
     });
-    this.inputEl.addEventListener('keydown', async (event) => {
-      if (event.key === 'Enter') await this.addTodoFromInput();
-    });
-
-    const dateGrid = compose.createDiv({ cls: 'daily-todolist-date-grid' });
-    this.startDateEl = this.createDateInput(dateGrid, '开始', 'start');
-    this.endDateEl = this.createDateInput(dateGrid, '结束', 'end');
-    this.dueDateEl = this.createDateInput(dateGrid, '到期', 'due');
-    this.priorityEl = this.createPrioritySelect(compose);
-
-    compose.createEl('button', { cls: 'daily-todolist-add-button', text: '添加到今日' })
-      .addEventListener('click', () => this.addTodoFromInput());
 
     const actions = root.createDiv({ cls: 'daily-todolist-actions' });
     actions.createEl('button', { text: '打开今日笔记' }).addEventListener('click', () => {
@@ -185,6 +177,33 @@ export class DailyTodoListView extends ItemView {
     const tasks = await this.readTasks(file);
     if (!this.canRender(refreshId)) return;
     this.renderTaskList(root, file, tasks, '今天还没有待办。');
+  }
+
+  private renderTodoComposer(
+    root: HTMLElement,
+    options: { title: string; placeholder: string; buttonText: string; date?: string; className?: string },
+  ): void {
+    const compose = root.createDiv({
+      cls: options.className ? `daily-todolist-compose ${options.className}` : 'daily-todolist-compose',
+    });
+    compose.createDiv({ cls: 'daily-todolist-compose-title', text: options.title });
+    this.inputEl = compose.createEl('input', {
+      type: 'text',
+      cls: 'daily-todolist-input',
+      attr: { placeholder: options.placeholder },
+    });
+    this.inputEl.addEventListener('keydown', async (event) => {
+      if (event.key === 'Enter') await this.addTodoFromInput(options.date);
+    });
+
+    const dateGrid = compose.createDiv({ cls: 'daily-todolist-date-grid' });
+    this.startDateEl = this.createDateInput(dateGrid, '开始', 'start');
+    this.endDateEl = this.createDateInput(dateGrid, '结束', 'end');
+    this.dueDateEl = this.createDateInput(dateGrid, '到期', 'due');
+    this.priorityEl = this.createPrioritySelect(compose);
+
+    compose.createEl('button', { cls: 'daily-todolist-add-button', text: options.buttonText })
+      .addEventListener('click', () => this.addTodoFromInput(options.date));
   }
 
   private createDateInput(parent: HTMLElement, label: string, type: string): HTMLInputElement {
@@ -600,6 +619,19 @@ export class DailyTodoListView extends ItemView {
 
   private async renderSelectedDate(root: HTMLElement, refreshId: number): Promise<void> {
     root.createEl('h3', { text: `${this.selectedDate} 待办` });
+    this.renderTodoComposer(root, {
+      title: `${window.moment(this.selectedDate).format('MM月DD日')} 待办捕捉`,
+      placeholder: '写下这一天需要补充的待办...',
+      buttonText: '添加到该日',
+      date: this.selectedDate,
+      className: 'daily-todolist-calendar-compose',
+    });
+
+    const actions = root.createDiv({ cls: 'daily-todolist-actions' });
+    actions.createEl('button', { text: '打开该日笔记' }).addEventListener('click', () => {
+      openDailyNoteForDate(this.app, this.plugin.settings, this.selectedDate);
+    });
+
     const path = getDailyNotePathForDate(this.app, this.plugin.settings, this.selectedDate);
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
@@ -921,7 +953,7 @@ export class DailyTodoListView extends ItemView {
   }
 
 
-  private async addTodoFromInput(): Promise<void> {
+  private async addTodoFromInput(date = window.moment().format('YYYY-MM-DD')): Promise<void> {
     const text = this.inputEl?.value.trim() ?? '';
     if (!text) return;
 
@@ -939,7 +971,7 @@ export class DailyTodoListView extends ItemView {
     }
 
     const taskText = formatTaskInput(input);
-    const file = await getOrCreateTodayDailyNote(this.app, this.plugin.settings);
+    const file = await getOrCreateDailyNoteForDate(this.app, this.plugin.settings, date);
     if (!file) return;
 
     const content = await this.app.vault.read(file);
@@ -956,6 +988,7 @@ export class DailyTodoListView extends ItemView {
     if (this.endDateEl) this.endDateEl.value = '';
     if (this.dueDateEl) this.dueDateEl.value = '';
     if (this.priorityEl) this.priorityEl.value = '';
+    new Notice(date === window.moment().format('YYYY-MM-DD') ? '已添加今日待办' : `已添加 ${date} 待办`);
     await this.refresh();
   }
 
