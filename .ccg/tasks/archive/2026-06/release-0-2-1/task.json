@@ -1,0 +1,12 @@
+{
+  "id": "release-0-2-1",
+  "title": "发布 0.2.1 并添加中文说明",
+  "status": "completed",
+  "complexity": "M",
+  "risk": "medium",
+  "domain": "devops",
+  "currentPhase": "completed",
+  "nextAction": "归档任务并推送发布",
+  "createdAt": "2026-06-13T02:24:00Z",
+  "branch": "main"
+}
